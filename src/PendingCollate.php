@@ -168,14 +168,6 @@ class PendingCollate implements Responsable
             $pages = implode(",", $pages);
         }
 
-        return $this->extract($pages);
-    }
-
-    /**
-     * Extract specific pages from the source document.
-     */
-    public function extract(string $pages): static
-    {
         $this->pageSelection = $pages;
 
         return $this;
