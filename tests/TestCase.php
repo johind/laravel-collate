@@ -2,8 +2,8 @@
 
 namespace Johind\Collate\Tests;
 
-use Orchestra\Testbench\TestCase as Orchestra;
 use Johind\Collate\CollateServiceProvider;
+use Orchestra\Testbench\TestCase as Orchestra;
 
 class TestCase extends Orchestra
 {

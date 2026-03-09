@@ -2,9 +2,9 @@
 
 namespace Johind\Collate;
 
+use Johind\Collate\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
-use Johind\Collate\Commands\InstallCommand;
 
 class CollateServiceProvider extends PackageServiceProvider
 {
