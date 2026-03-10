@@ -42,7 +42,7 @@ it('can inspect recorded operations via callback', function () {
 
     Collate::open('doc.pdf')
         ->rotate(90)
-        ->password('secret')
+        ->encrypt('secret')
         ->save('rotated.pdf');
 
     Collate::assertSaved(callback: fn ($pending) => $pending->isEncrypted());
