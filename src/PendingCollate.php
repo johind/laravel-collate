@@ -582,7 +582,7 @@ class PendingCollate implements Responsable
         $filename ??= 'document.pdf';
         $tempOutput = $this->process();
 
-        return response()->streamDownload(
+        $response = response()->streamDownload(
             function () use ($tempOutput) {
                 // Stream the file to the output buffer in chunks rather than
                 // reading the whole PDF into a PHP string first.
@@ -592,11 +592,17 @@ class PendingCollate implements Responsable
                 @unlink($tempOutput);
             },
             $filename,
-            [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => "{$disposition}; filename=\"{$filename}\"",
-            ],
+            ['Content-Type' => 'application/pdf'],
         );
+
+        // streamDownload() always sets Content-Disposition to 'attachment'.
+        // We override it here to support both inline and attachment dispositions.
+        $response->headers->set(
+            'Content-Disposition',
+            "{$disposition}; filename=\"{$filename}\""
+        );
+
+        return $response;
     }
 
     /**
