@@ -107,16 +107,6 @@ class PendingCollate implements Responsable
     }
 
     /**
-     * Start manipulating an existing PDF.
-     */
-    public function open(string|UploadedFile $file): static
-    {
-        $this->source = $this->resolveFilePath($file);
-
-        return $this;
-    }
-
-    /**
      * Add a complete file, or a single page from a file.
      */
     public function addPage(
@@ -229,11 +219,11 @@ class PendingCollate implements Responsable
     }
 
     /**
-     * Prevent the document from being printed.
+     * Restrict permissions on the document (e.g. 'print', 'modify', 'extract').
      */
-    public function preventPrinting(): static
+    public function restrict(string ...$permissions): static
     {
-        $this->restrictions[] = 'print';
+        array_push($this->restrictions, ...$permissions);
 
         return $this;
     }
@@ -335,7 +325,7 @@ class PendingCollate implements Responsable
     /**
      * Set metadata on the output document.
      */
-    public function setMetadata(
+    public function withMetadata(
         ?string $title = null,
         ?string $author = null,
         ?string $subject = null,
@@ -403,14 +393,14 @@ class PendingCollate implements Responsable
     }
 
     /**
-     * Encode the PDF as a base64 string.
+     * Get the raw PDF contents as a string.
      */
-    public function toBase64(): string
+    public function content(): string
     {
         $tempOutput = $this->process();
 
         try {
-            return base64_encode(file_get_contents($tempOutput));
+            return file_get_contents($tempOutput);
         } finally {
             @unlink($tempOutput);
         }
@@ -423,9 +413,8 @@ class PendingCollate implements Responsable
      *
      * @return \Illuminate\Support\Collection<int, string>
      */
-    public function split(
-        string $path = '{page}.pdf',
-    ): \Illuminate\Support\Collection {
+    public function split(string $path): \Illuminate\Support\Collection
+    {
         $dir = $this->collate->tempDirectory();
 
         if (! is_dir($dir)) {
