@@ -168,6 +168,12 @@ class PendingCollate implements Responsable
      */
     public function removePages(string|array $pages): static
     {
+        if ($this->pageSelection !== null) {
+            throw new \BadMethodCallException(
+                'Collate: cannot call removePages() after onlyPages() or removePages() has already been called.'
+            );
+        }
+
         // Normalize the input into a clean, sorted array of integers,
         // so we can process the gaps sequentially from start to finish.
         $items = is_array($pages) ? $pages : explode(',', $pages);
@@ -223,6 +229,12 @@ class PendingCollate implements Responsable
      */
     public function onlyPages(string|array $pages): static
     {
+        if ($this->pageSelection !== null) {
+            throw new \BadMethodCallException(
+                'Collate: cannot call onlyPages() after removePages() or onlyPages() has already been called.'
+            );
+        }
+
         if (is_array($pages)) {
             $pages = implode(',', $pages);
         }
@@ -378,11 +390,16 @@ class PendingCollate implements Responsable
         ?string $subject = null,
         ?string $keywords = null,
     ): static {
-        foreach (
-            compact('title', 'author', 'subject', 'keywords') as $key => $value
-        ) {
+        $map = [
+            'title' => 'Title',
+            'author' => 'Author',
+            'subject' => 'Subject',
+            'keywords' => 'Keywords',
+        ];
+
+        foreach (compact('title', 'author', 'subject', 'keywords') as $key => $value) {
             if ($value !== null) {
-                $this->metadata[ucfirst($key)] = $value;
+                $this->metadata[$map[$key]] = $value;
             }
         }
 
@@ -470,21 +487,13 @@ class PendingCollate implements Responsable
             mkdir($dir, 0755, true);
         }
 
+        // Run the full pipeline first so that all operations (page selection,
+        // rotations, encryption, overlays, etc.) are applied before splitting.
+        // The processed file becomes the input to the split command.
+        $processedFile = $this->process();
+
         $prefix = $dir.'/'.Str::uuid();
-        $command = [$this->collate->binaryPath()];
-
-        if ($this->decryptPassword !== null) {
-            $command[] = "--password={$this->decryptPassword}";
-        }
-
-        if ($this->source) {
-            $command[] = $this->source;
-        } else {
-            $command[] = '--empty';
-        }
-
-        $command[] = '--split-pages';
-        $command[] = "{$prefix}-%d.pdf";
+        $command = [$this->collate->binaryPath(), $processedFile, '--split-pages', "{$prefix}-%d.pdf"];
 
         try {
             $result = Process::run($command);
@@ -505,7 +514,7 @@ class PendingCollate implements Responsable
                 $destination = str_replace('{page}', (string) $page, $path);
 
                 // Stream each page file to disk rather than loading it into
-                // memory. Individual pages of a large document can still be
+                // memory — individual pages of a large document can still be
                 // several megabytes each.
                 $disk->put($destination, fopen($tempFile, 'r'));
                 @unlink($tempFile);
@@ -516,7 +525,7 @@ class PendingCollate implements Responsable
 
             return $paths;
         } finally {
-            $this->cleanupTempInputFiles();
+            @unlink($processedFile);
         }
     }
 
@@ -674,13 +683,18 @@ class PendingCollate implements Responsable
             $command[] = '--decrypt';
         }
 
+        // When merging additions into a source, qpdf requires --empty
+        // as the container; the source is then referenced inside --pages instead.
+        // When there is no source at all, --empty is also the correct base.
         if ($this->source && empty($this->additions)) {
             $command[] = $this->source;
         } else {
             $command[] = '--empty';
         }
 
-        // Page selection from source
+        // The --pages block controls which pages end up in the output.
+        // It is always needed when a source is set, and also when only
+        // additions are present (no source document).
         if ($this->source) {
             $pages = $pageOverride ?? $this->pageSelection;
 
@@ -688,7 +702,6 @@ class PendingCollate implements Responsable
             $command[] = $this->source;
             $command[] = $pages ?? '1-z';
 
-            // Additional files
             foreach ($this->additions as $addition) {
                 $command[] = $addition['file'];
                 $command[] = $addition['pages'] ?? '1-z';
