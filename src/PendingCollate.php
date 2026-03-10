@@ -279,9 +279,16 @@ class PendingCollate implements Responsable
 
     /**
      * Restrict permissions on the document (e.g. 'print', 'modify', 'extract').
+     * Must be called after encrypt().
      */
     public function restrict(string ...$permissions): static
     {
+        if ($this->encryption === null) {
+            throw new \BadMethodCallException(
+                'Collate: cannot restrict permissions without encryption. Call encrypt() first.'
+            );
+        }
+
         array_push($this->restrictions, ...$permissions);
 
         return $this;
@@ -352,7 +359,7 @@ class PendingCollate implements Responsable
     public function metadata(): PdfMetadata
     {
         if ($this->source === null) {
-            throw new \BadMethodCallException('Collate: cannot read metadata without a source file. Use open() first.');
+            throw new \BadMethodCallException('Collate: cannot read metadata without a source file. Use open() or inspect() first.');
         }
 
         $result = Process::run([
@@ -412,7 +419,7 @@ class PendingCollate implements Responsable
     public function pageCount(): int
     {
         if ($this->source === null) {
-            throw new \BadMethodCallException('Collate: cannot count pages without a source file. Use open() first.');
+            throw new \BadMethodCallException('Collate: cannot count pages without a source file. Use open() or inspect() first.');
         }
 
         $result = Process::run([
@@ -657,14 +664,6 @@ class PendingCollate implements Responsable
                 $result->errorOutput(),
             );
         }
-    }
-
-    /**
-     * Run the qpdf process for a specific page selection.
-     */
-    protected function processForPages(string $pages): string
-    {
-        return $this->process($pages);
     }
 
     /**
