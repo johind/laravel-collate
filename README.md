@@ -1,6 +1,6 @@
 # Manipulate PDFs within Laravel applications.
 
-Collate is a Laravel package that provides a beautiful, fluent API for manipulating PDFs. Originally built to prepare documents for AI/LLM ingestion, it handles the messy reality of PDF manipulation: merging, extracting, encrypting, watermarking, and more. All powered by [qpdf](https://qpdf.readthedocs.io/).
+Collate is a Laravel package that provides an intuitive API for manipulating PDFs. Originally built to prepare documents for AI/LLM ingestion, it handles all the complexities of PDF manipulation, including merging, extracting, encrypting, watermarking and much more besides. All of this is powered by [qpdf](https://qpdf.readthedocs.io/).
 
 ## Requirements
 
