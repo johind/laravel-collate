@@ -93,10 +93,9 @@ class PendingCollate implements Responsable
     protected array $tempInputFiles = [];
 
     public function __construct(
-        protected Collate        $collate,
+        protected Collate $collate,
         string|UploadedFile|null $source = null,
-    )
-    {
+    ) {
         if ($source !== null) {
             $this->source = $this->resolveFilePath($source);
         }
@@ -122,12 +121,11 @@ class PendingCollate implements Responsable
      */
     public function addPage(
         string|UploadedFile $file,
-        ?int                $pageNumber = null,
-    ): static
-    {
+        ?int $pageNumber = null,
+    ): static {
         $this->additions[] = [
             'file' => $this->resolveFilePath($file),
-            'pages' => $pageNumber !== null ? (string)$pageNumber : null,
+            'pages' => $pageNumber !== null ? (string) $pageNumber : null,
         ];
 
         return $this;
@@ -138,9 +136,8 @@ class PendingCollate implements Responsable
      */
     public function addPages(
         string|array|UploadedFile $files,
-        ?string                   $range = null,
-    ): static
-    {
+        ?string $range = null,
+    ): static {
         if (is_array($files)) {
             foreach ($files as $file) {
                 $this->addPage($file);
@@ -202,11 +199,10 @@ class PendingCollate implements Responsable
      * Encrypt the document and restrict permissions.
      */
     public function encrypt(
-        string  $userPassword,
+        string $userPassword,
         ?string $ownerPassword = null,
-        int     $bitLength = 256,
-    ): static
-    {
+        int $bitLength = 256,
+    ): static {
         if (! in_array($bitLength, [40, 128, 256], true)) {
             throw new \InvalidArgumentException(
                 "Encryption bit length must be 40, 128, or 256. Got: {$bitLength}",
@@ -344,11 +340,9 @@ class PendingCollate implements Responsable
         ?string $author = null,
         ?string $subject = null,
         ?string $keywords = null,
-    ): static
-    {
+    ): static {
         foreach (
-            compact('title', 'author', 'subject', 'keywords')
-            as $key => $value
+            compact('title', 'author', 'subject', 'keywords') as $key => $value
         ) {
             if ($value !== null) {
                 $this->metadata[ucfirst($key)] = $value;
@@ -373,7 +367,7 @@ class PendingCollate implements Responsable
             $this->source,
         ]);
 
-        return (int)trim($result->output());
+        return (int) trim($result->output());
     }
 
     /**
@@ -396,8 +390,7 @@ class PendingCollate implements Responsable
      */
     public function download(
         string $filename = 'document.pdf',
-    ): StreamedResponse
-    {
+    ): StreamedResponse {
         return $this->toResponse(request(), $filename, 'attachment');
     }
 
@@ -432,15 +425,14 @@ class PendingCollate implements Responsable
      */
     public function split(
         string $path = '{page}.pdf',
-    ): \Illuminate\Support\Collection
-    {
+    ): \Illuminate\Support\Collection {
         $dir = $this->collate->tempDirectory();
 
-        if (!is_dir($dir)) {
+        if (! is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
 
-        $prefix = $dir . '/' . Str::uuid();
+        $prefix = $dir.'/'.Str::uuid();
         $command = [$this->collate->binaryPath()];
 
         if ($this->decryptPassword !== null) {
@@ -459,7 +451,7 @@ class PendingCollate implements Responsable
         try {
             $result = Process::run($command);
 
-            if (!$result->successful()) {
+            if (! $result->successful()) {
                 throw new \RuntimeException(
                     "Collate: qpdf split failed — {$result->errorOutput()}",
                 );
@@ -470,7 +462,7 @@ class PendingCollate implements Responsable
             $page = 1;
 
             while (file_exists($tempFile = "{$prefix}-{$page}.pdf")) {
-                $destination = str_replace('{page}', (string)$page, $path);
+                $destination = str_replace('{page}', (string) $page, $path);
                 $disk->put($destination, file_get_contents($tempFile));
                 @unlink($tempFile);
 
@@ -491,8 +483,7 @@ class PendingCollate implements Responsable
         $request,
         ?string $filename = null,
         string $disposition = 'inline',
-    ): StreamedResponse
-    {
+    ): StreamedResponse {
         $filename ??= 'document.pdf';
         $tempOutput = $this->process();
 
@@ -520,14 +511,14 @@ class PendingCollate implements Responsable
         try {
             $result = Process::run($command);
 
-            if (!$result->successful()) {
+            if (! $result->successful()) {
                 @unlink($tempOutput);
                 throw new \RuntimeException(
                     "Collate: qpdf failed — {$result->errorOutput()}",
                 );
             }
 
-            if (!empty($this->metadata)) {
+            if (! empty($this->metadata)) {
                 $this->applyMetadata($tempOutput);
             }
 
@@ -542,7 +533,7 @@ class PendingCollate implements Responsable
      */
     protected function applyMetadata(string $file): void
     {
-        $jsonFile = $file . '.json';
+        $jsonFile = $file.'.json';
 
         $infoFields = [];
         foreach ($this->metadata as $key => $value) {
@@ -568,13 +559,13 @@ class PendingCollate implements Responsable
         $result = Process::run([
             $this->collate->binaryPath(),
             $file,
-            '--update-from-json=' . $jsonFile,
+            '--update-from-json='.$jsonFile,
             '--replace-input',
         ]);
 
         @unlink($jsonFile);
 
-        if (!$result->successful()) {
+        if (! $result->successful()) {
             throw new \RuntimeException(
                 "Collate: failed to set metadata — {$result->errorOutput()}",
             );
@@ -595,10 +586,9 @@ class PendingCollate implements Responsable
      * @return list<string>
      */
     protected function buildCommand(
-        string  $outputPath,
+        string $outputPath,
         ?string $pageOverride = null,
-    ): array
-    {
+    ): array {
         $command = [$this->collate->binaryPath()];
 
         if ($this->decryptPassword !== null) {
@@ -627,7 +617,7 @@ class PendingCollate implements Responsable
             }
 
             $command[] = '--';
-        } elseif (!empty($this->additions)) {
+        } elseif (! empty($this->additions)) {
             $command[] = '--pages';
 
             foreach ($this->additions as $addition) {
@@ -648,9 +638,9 @@ class PendingCollate implements Responsable
             $command[] = '--encrypt';
             $command[] = $this->encryption['user_password'];
             $command[] = $this->encryption['owner_password'];
-            $command[] = (string)$this->encryption['bit_length'];
+            $command[] = (string) $this->encryption['bit_length'];
 
-            if (!empty($this->restrictions)) {
+            if (! empty($this->restrictions)) {
                 $command[] = '--modify=none';
 
                 foreach ($this->restrictions as $restriction) {
@@ -753,10 +743,10 @@ class PendingCollate implements Responsable
     {
         $dir = $this->collate->tempDirectory();
 
-        if (!is_dir($dir)) {
+        if (! is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
 
-        return $dir . '/' . Str::uuid() . '.pdf';
+        return $dir.'/'.Str::uuid().'.pdf';
     }
 }
