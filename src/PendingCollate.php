@@ -4,6 +4,7 @@ namespace Johind\Collate;
 
 use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Contracts\Support\Responsable;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Process;
@@ -163,14 +164,31 @@ class PendingCollate implements Responsable
     }
 
     /**
-     * Remove multiple pages or a range (e.g., [1, 3] or '5-10').
+     * Remove multiple pages or a range (e.g., [1, 3], '5-10', or '1,3,5-8').
      */
     public function removePages(string|array $pages): static
     {
         // Normalize the input into a clean, sorted array of integers,
         // so we can process the gaps sequentially from start to finish.
-        $pagesToRemove = is_array($pages) ? $pages : explode(',', $pages);
-        $pagesToRemove = array_map('intval', $pagesToRemove);
+        $items = is_array($pages) ? $pages : explode(',', $pages);
+
+        $pagesToRemove = [];
+
+        // Expand any hyphenated ranges (e.g. '5-10') into individual page
+        // numbers before processing. intval alone would silently truncate
+        // '5-10' to 5, dropping pages 6 through 10.
+        foreach ($items as $item) {
+            $item = trim((string) $item);
+
+            if (str_contains($item, '-')) {
+                [$start, $end] = explode('-', $item, 2);
+                array_push($pagesToRemove, ...range((int) $start, (int) $end));
+            } else {
+                $pagesToRemove[] = (int) $item;
+            }
+        }
+
+        $pagesToRemove = array_unique($pagesToRemove);
         sort($pagesToRemove);
 
         $keepRanges = [];
@@ -399,7 +417,9 @@ class PendingCollate implements Responsable
         $disk = Storage::disk($this->collate->diskName());
 
         try {
-            return $disk->put($path, file_get_contents($tempOutput));
+            // Use a stream rather than file_get_contents to avoid loading
+            // the entire file into PHP memory, which would OOM on large PDFs.
+            return $disk->put($path, fopen($tempOutput, 'r'));
         } finally {
             @unlink($tempOutput);
         }
@@ -484,7 +504,11 @@ class PendingCollate implements Responsable
 
             while (file_exists($tempFile = "{$prefix}-{$page}.pdf")) {
                 $destination = str_replace('{page}', (string) $page, $path);
-                $disk->put($destination, file_get_contents($tempFile));
+
+                // Stream each page file to disk rather than loading it into
+                // memory. Individual pages of a large document can still be
+                // several megabytes each.
+                $disk->put($destination, fopen($tempFile, 'r'));
                 @unlink($tempFile);
 
                 $paths->push($destination);
@@ -510,7 +534,11 @@ class PendingCollate implements Responsable
 
         return response()->streamDownload(
             function () use ($tempOutput) {
-                echo file_get_contents($tempOutput);
+                // Stream the file to the output buffer in chunks rather than
+                // reading the whole PDF into a PHP string first.
+                $stream = fopen($tempOutput, 'r');
+                fpassthru($stream);
+                fclose($stream);
                 @unlink($tempOutput);
             },
             $filename,
@@ -560,7 +588,7 @@ class PendingCollate implements Responsable
 
         $infoFields = [];
         foreach ($this->metadata as $key => $value) {
-            $infoFields["/{$key}"] = $value; // qpdf can usually take direct strings for updates if formatted correctly
+            $infoFields["/{$key}"] = $value;
         }
 
         $readResult = Process::run([
@@ -572,7 +600,6 @@ class PendingCollate implements Responsable
         $existing = json_decode($readResult->output(), true);
         $objects = $existing['objects'] ?? [];
 
-        // Correct trailer path
         $infoRef = $existing['trailer']['dict']['/Info'] ?? null;
 
         $qpdfObjects = [];
@@ -582,23 +609,25 @@ class PendingCollate implements Responsable
         } else {
             $maxId = 0;
             foreach (array_keys($objects) as $key) {
-                // Correct regex to account for "obj:" prefix
                 if (preg_match('/^obj:(\d+) \d+ R$/', $key, $matches)) {
                     $maxId = max($maxId, (int) $matches[1]);
                 }
             }
             $newId = $maxId + 1;
-            $newRef = "obj:{$newId} 0 R"; // The key must include obj:
-            $trailerRef = "{$newId} 0 R"; // The trailer reference doesn't use obj:
+            $newRef = "obj:{$newId} 0 R";
+            $trailerRef = "{$newId} 0 R";
 
             $qpdfObjects[$newRef] = ['value' => $infoFields];
             $qpdfObjects['trailer'] = ['dict' => ['/Info' => $trailerRef]];
         }
 
+        // The qpdf JSON format requires the objects map to be nested under an
+        // 'objects' key in the second array element. Passing it unwrapped causes
+        // qpdf to reject the payload with a parse error.
         $json = json_encode([
             'qpdf' => [
                 ['jsonversion' => 2, 'pushedinheritedpageresources' => false],
-                $qpdfObjects,
+                ['objects' => $qpdfObjects],
             ],
         ]);
 
@@ -727,9 +756,6 @@ class PendingCollate implements Responsable
 
         $command[] = $outputPath;
 
-        // Metadata is applied as a separate qpdf invocation after the main one,
-        // so we handle it in the process() method instead.
-
         return $command;
     }
 
@@ -763,7 +789,7 @@ class PendingCollate implements Responsable
     /**
      * Download a file from a remote disk to a local temp path.
      */
-    protected function downloadToTemp(\Illuminate\Filesystem\FilesystemAdapter $disk, string $file): string
+    protected function downloadToTemp(FilesystemAdapter $disk, string $file): string
     {
         $tempPath = $this->tempFilePath();
 
