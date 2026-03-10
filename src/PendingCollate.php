@@ -20,6 +20,26 @@ class PendingCollate implements Responsable
     use Conditionable;
 
     /**
+     * Map of valid permission names to their correct qpdf deny flag.
+     *
+     * qpdf does not use a uniform value for all permission flags —
+     * some accept 'none', others accept 'n'. This map encodes the
+     * correct deny form for each supported permission.
+     *
+     * @var array<string, string>
+     */
+    protected const array RESTRICTIONS = [
+        'print' => '--print=none',
+        'modify' => '--modify=none',
+        'extract' => '--extract=n',
+        'annotate' => '--annotate=n',
+        'assemble' => '--assemble=n',
+        'print-highres' => '--print-highres=n',
+        'form' => '--form=n',
+        'modify-other' => '--modify-other=n',
+    ];
+
+    /**
      * The source file being manipulated.
      */
     protected ?string $source = null;
@@ -278,8 +298,11 @@ class PendingCollate implements Responsable
     }
 
     /**
-     * Restrict permissions on the document (e.g. 'print', 'modify', 'extract').
+     * Restrict permissions on the document.
      * Must be called after encrypt().
+     *
+     * Supported permissions: print, modify, extract, annotate,
+     * assemble, print-highres, form, modify-other.
      */
     public function restrict(string ...$permissions): static
     {
@@ -287,6 +310,15 @@ class PendingCollate implements Responsable
             throw new \BadMethodCallException(
                 'Collate: cannot restrict permissions without encryption. Call encrypt() first.'
             );
+        }
+
+        foreach ($permissions as $permission) {
+            if (! array_key_exists($permission, self::RESTRICTIONS)) {
+                $valid = implode(', ', array_keys(self::RESTRICTIONS));
+                throw new \InvalidArgumentException(
+                    "Collate: '{$permission}' is not a valid permission. Valid permissions are: {$valid}."
+                );
+            }
         }
 
         array_push($this->restrictions, ...$permissions);
@@ -731,10 +763,8 @@ class PendingCollate implements Responsable
             $command[] = (string) $this->encryption['bit_length'];
 
             if (! empty($this->restrictions)) {
-                $command[] = '--modify=none';
-
                 foreach ($this->restrictions as $restriction) {
-                    $command[] = "--{$restriction}=none";
+                    $command[] = self::RESTRICTIONS[$restriction];
                 }
             }
 
