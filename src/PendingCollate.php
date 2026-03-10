@@ -307,16 +307,17 @@ class PendingCollate implements Responsable
 
         $json = json_decode($result->output(), true);
         $info = [];
+        $objects = $json['objects'] ?? [];
 
-        // qpdf JSON v2 nests document info under objects
-        foreach ($json['objects'] ?? [] as $key => $object) {
-            if (str_contains($key, '/Info')) {
-                foreach ($object['value'] as $field => $meta) {
-                    if (is_string($meta)) {
-                        $info[$field] = $meta;
-                    } elseif (is_array($meta) && isset($meta['value'])) {
-                        $info[$field] = $meta['value'];
-                    }
+        // The trailer tells us which object ID holds the /Info dictionary
+        $infoRef = $objects['trailer']['/Info'] ?? null;
+
+        if ($infoRef && isset($objects[$infoRef])) {
+            foreach ($objects[$infoRef] as $field => $meta) {
+                if (is_string($meta)) {
+                    $info[$field] = $meta;
+                } elseif (is_array($meta) && isset($meta['value'])) {
+                    $info[$field] = $meta['value'];
                 }
             }
         }
