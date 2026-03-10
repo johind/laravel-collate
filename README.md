@@ -1,6 +1,6 @@
 # Manipulate PDFs within Laravel applications.
 
-Collate is a Laravel package that provides a beautiful, fluent API for manipulating PDFs. Merge documents, extract pages, encrypt files, add watermarks, and more — all powered by [qpdf](https://qpdf.readthedocs.io/).
+Collate is a Laravel package that provides a beautiful, fluent API for manipulating PDFs. Originally built to prepare documents for AI/LLM ingestion, it handles the messy reality of PDF manipulation: merging, extracting, encrypting, watermarking, and more. All powered by [qpdf](https://qpdf.readthedocs.io/).
 
 ## Requirements
 
@@ -189,17 +189,17 @@ Collate::open('content.pdf')
     ->save('branded.pdf');
 ```
 
-### Encryption & Passwords
+### Encryption & Decryption
 
-Protect a document with a password:
+Encrypt a document with a password:
 
 ```php
 Collate::open('confidential.pdf')
-    ->password('secret')
+    ->encrypt('secret')
     ->save('protected.pdf');
 ```
 
-For more control, use `encrypt()` with separate user and owner passwords:
+For more control, use separate user and owner passwords:
 
 ```php
 Collate::open('confidential.pdf')
@@ -210,6 +210,23 @@ Collate::open('confidential.pdf')
     )
     ->preventPrinting()
     ->save('locked.pdf');
+```
+
+Decrypt a password-protected document:
+
+```php
+Collate::open('locked.pdf')
+    ->decrypt('secret')
+    ->save('unlocked.pdf');
+```
+
+Re-encrypt with a new password in one step:
+
+```php
+Collate::open('locked.pdf')
+    ->decrypt('old-password')
+    ->encrypt('new-password')
+    ->save('re-encrypted.pdf');
 ```
 
 ### Flattening
@@ -255,7 +272,7 @@ Set metadata on the output document:
 Collate::open('document.pdf')
     ->setMetadata(
         title: 'Annual Report 2024',
-        author: 'Jori Hinderfeld',
+        author: 'Taylor Otwell',
     )
     ->save('branded-report.pdf');
 ```
@@ -339,6 +356,14 @@ Collate::openInvoice(2024001)->download();
 ## Changelog
 
 Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
+
+## Contributing
+
+Contributions are welcome! Please open an issue to discuss bugs, feature requests, or pull requests. I do not provide monetary compensations.
+
+## Security
+
+If you discover a security vulnerability, please send an email rather than opening a GitHub issue.
 
 ## License
 
