@@ -2,6 +2,7 @@
 
 namespace Johind\Collate;
 
+use Closure;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Traits\Macroable;
 
@@ -37,12 +38,16 @@ class Collate
     /**
      * Merge multiple PDFs into a single document.
      */
-    public function merge(string|UploadedFile ...$files): PendingCollate
+    public function merge(Closure|string|UploadedFile ...$files): PendingCollate
     {
         $pending = new PendingCollate($this);
 
         foreach ($files as $file) {
-            $pending->addPage($file);
+            if ($file instanceof Closure) {
+                $file($pending);
+            } else {
+                $pending->addPage($file);
+            }
         }
 
         return $pending;
