@@ -465,11 +465,14 @@ class PendingCollate implements Responsable
 
     /**
      * Save the final PDF to a path on the configured disk.
+     *
+     * Pass a disk name to save to a different disk than the one configured
+     * on the Collate instance, for example to read from local and write to S3.
      */
-    public function save(string $path): bool
+    public function save(string $path, ?string $disk = null): bool
     {
         $tempOutput = $this->process();
-        $disk = Storage::disk($this->collate->diskName());
+        $disk = Storage::disk($disk ?? $this->collate->diskName());
 
         try {
             // Use a stream rather than file_get_contents to avoid loading
