@@ -159,12 +159,12 @@ class PendingCollateFake extends PendingCollate
         ]);
     }
 
-    public function toBase64(): string
+    public function content(): string
     {
-        return base64_encode('fake-pdf-content');
+        return 'fake-pdf-content';
     }
 
-    public function split(string $path = '{page}.pdf'): Collection
+    public function split(string $path): Collection
     {
         $this->wasSplit = true;
 
