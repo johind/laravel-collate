@@ -401,18 +401,24 @@ class PendingCollate implements Responsable
         ]);
 
         $json = json_decode($result->output(), true);
+        $qpdfObjects = $json['qpdf'][1] ?? [];
         $info = [];
 
-        // Trailer is at the root, and the value is inside 'dict'
-        $infoRef = $json['trailer']['dict']['/Info'] ?? null;
+        // The info ref is stored as e.g. "6 0 R" in the trailer value.
+        $infoRef = $qpdfObjects['trailer']['value']['/Info'] ?? null;
 
-        // $infoRef will look like "obj:1 0 R". We use that to look up the object.
-        if ($infoRef && isset($json['objects'][$infoRef]['value'])) {
-            foreach ($json['objects'][$infoRef]['value'] as $field => $meta) {
-                if (is_string($meta)) {
-                    $info[$field] = $meta;
-                } elseif (is_array($meta) && isset($meta['value'])) {
-                    $info[$field] = $meta['value'];
+        // The object key is "obj:6 0 R" — we must prepend "obj:" to the ref.
+        if ($infoRef && isset($qpdfObjects["obj:{$infoRef}"]['value'])) {
+            foreach ($qpdfObjects["obj:{$infoRef}"]['value'] as $field => $meta) {
+                // Strip the leading "/" from the field key to normalise
+                // e.g. "/Title" → "Title" for PdfMetadata::fromArray.
+                $key = ltrim($field, '/');
+
+                // qpdf JSON v2 encodes strings with a "u:" prefix.
+                if (is_string($meta) && str_starts_with($meta, 'u:')) {
+                    $info[$key] = substr($meta, 2);
+                } elseif (is_string($meta)) {
+                    $info[$key] = $meta;
                 }
             }
         }
@@ -429,16 +435,9 @@ class PendingCollate implements Responsable
         ?string $subject = null,
         ?string $keywords = null,
     ): static {
-        $map = [
-            'title' => 'Title',
-            'author' => 'Author',
-            'subject' => 'Subject',
-            'keywords' => 'Keywords',
-        ];
-
         foreach (compact('title', 'author', 'subject', 'keywords') as $key => $value) {
             if ($value !== null) {
-                $this->metadata[$map[$key]] = $value;
+                $this->metadata[ucfirst($key)] = $value;
             }
         }
 
@@ -644,7 +643,8 @@ class PendingCollate implements Responsable
 
         $infoFields = [];
         foreach ($this->metadata as $key => $value) {
-            $infoFields["/{$key}"] = $value;
+            // qpdf JSON v2 encodes PDF strings with a "u:" prefix.
+            $infoFields["/{$key}"] = "u:{$value}";
         }
 
         $readResult = Process::run([
@@ -662,17 +662,21 @@ class PendingCollate implements Responsable
         }
 
         $existing = json_decode($readResult->output(), true);
-        $objects = $existing['objects'] ?? [];
+        $qpdfObjects = $existing['qpdf'][1] ?? [];
 
-        $infoRef = $existing['trailer']['dict']['/Info'] ?? null;
+        // The info ref is stored as e.g. "6 0 R" in the trailer value.
+        // The corresponding object key is "obj:6 0 R".
+        $infoRef = $qpdfObjects['trailer']['value']['/Info'] ?? null;
 
-        $qpdfObjects = [];
+        $patch = [];
 
         if ($infoRef) {
-            $qpdfObjects[$infoRef] = ['value' => $infoFields];
+            // Update the existing info object directly.
+            $patch["obj:{$infoRef}"] = ['value' => $infoFields];
         } else {
+            // No info object exists — create one and point the trailer at it.
             $maxId = 0;
-            foreach (array_keys($objects) as $key) {
+            foreach (array_keys($qpdfObjects) as $key) {
                 if (preg_match('/^obj:(\d+) \d+ R$/', $key, $matches)) {
                     $maxId = max($maxId, (int) $matches[1]);
                 }
@@ -681,17 +685,18 @@ class PendingCollate implements Responsable
             $newRef = "obj:{$newId} 0 R";
             $trailerRef = "{$newId} 0 R";
 
-            $qpdfObjects[$newRef] = ['value' => $infoFields];
-            $qpdfObjects['trailer'] = ['dict' => ['/Info' => $trailerRef]];
+            $patch[$newRef] = ['value' => $infoFields];
+
+            // Update only the /Info key on the trailer — qpdf merges the rest.
+            $patch['trailer'] = ['value' => ['/Info' => $trailerRef]];
         }
 
-        // The qpdf JSON format requires the objects map to be nested under an
-        // 'objects' key in the second array element. Passing it unwrapped causes
-        // qpdf to reject the payload with a parse error.
+        // The second element of the qpdf array is a flat object whose keys
+        // are either "trailer" or "obj:n n R". No wrapper key is used.
         $json = json_encode([
             'qpdf' => [
                 ['jsonversion' => 2, 'pushedinheritedpageresources' => false],
-                ['objects' => $qpdfObjects],
+                $patch,
             ],
         ]);
 
