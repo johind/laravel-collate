@@ -188,7 +188,6 @@ class PendingCollate implements Responsable
             }
         }
 
-        $pagesToRemove = array_unique($pagesToRemove);
         sort($pagesToRemove);
 
         $keepRanges = [];
