@@ -36,6 +36,18 @@ class Collate
     }
 
     /**
+     * Open a PDF for reading only (metadata, page count, etc.).
+     *
+     * Semantically equivalent to open(), but signals that no mutations
+     * are intended. Use this instead of open() when you only need to
+     * read information from a document.
+     */
+    public function inspect(string|UploadedFile $file): PendingCollate
+    {
+        return new PendingCollate($this, $file);
+    }
+
+    /**
      * Merge multiple PDFs into a single document.
      */
     public function merge(Closure|string|UploadedFile ...$files): PendingCollate
