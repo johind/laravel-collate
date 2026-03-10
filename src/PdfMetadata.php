@@ -48,6 +48,8 @@ readonly class PdfMetadata
             'Keywords' => $this->keywords,
             'Creator' => $this->creator,
             'Producer' => $this->producer,
+            'CreationDate' => $this->creationDate,
+            'ModDate' => $this->modDate,
         ], fn ($value) => $value !== null);
     }
 }
