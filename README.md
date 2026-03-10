@@ -47,7 +47,7 @@ return [
 
 ## Usage
 
-Collate provides two entry points — `open()` for working with an existing PDF, and `merge()` for combining multiple files. Both return a fluent builder that lets you chain operations before saving or returning a response.
+Collate provides two entry points — `open()` for working with and manipulating an existing PDF, and `merge()` for combining multiple files. For read-only operations such as inspecting metadata or counting pages, use `inspect()` instead. All three return a fluent builder that lets you chain operations before saving or returning a response.
 
 ### Opening a PDF
 
@@ -86,7 +86,7 @@ Collate::merge(
 For more control, pass a closure to select specific pages:
 
 ```php
-Collate::merge(function ($pdf) {
+Collate::merge(function (PendingCollate $pdf) {
     $pdf->addPage('documents/cover.pdf');
     $pdf->addPages('documents/appendix.pdf', range: '1-3');
 })->save('documents/book.pdf');
@@ -115,6 +115,12 @@ Collate::open('report.pdf')
 Collate::open('report.pdf')
     ->addPages(['exhibit-a.pdf', 'exhibit-b.pdf'])
     ->save('report-with-exhibits.pdf');
+
+// Add different page ranges from different files (chain multiple calls)
+Collate::open('report.pdf')
+    ->addPages('appendix-a.pdf', range: '1-3')
+    ->addPages('appendix-b.pdf', range: '2-5')
+    ->save('report-final.pdf');
 ```
 
 ### Removing Pages
@@ -138,7 +144,7 @@ Collate::open('document.pdf')
 
 ### Extracting Pages
 
-Keep only the pages you need:
+Keep only the pages you need using `onlyPages()`:
 
 ```php
 Collate::open('document.pdf')
@@ -151,15 +157,28 @@ Collate::open('document.pdf')
     ->save('selected-pages.pdf');
 ```
 
+Note: `onlyPages()` and `removePages()` are mutually exclusive — calling both on the same instance will throw a `BadMethodCallException`.
+
 ### Splitting a PDF
 
-Split every page into its own file. The path supports a `{page}` placeholder:
+Split every page into its own file. The path supports a `{page}` placeholder for the page number:
 
 ```php
 $paths = Collate::open('multi-page.pdf')
     ->split('pages/page-{page}.pdf');
 
 // $paths → Collection ['pages/page-1.pdf', 'pages/page-2.pdf', ...]
+```
+
+> **Note:** Always include `{page}` in your path. Without it, every page will be written to the same destination, with each one overwriting the last.
+
+All operations — page selection, rotation, overlays, etc. — are applied before splitting, so you can chain them freely:
+
+```php
+Collate::open('scanned.pdf')
+    ->rotate(90)
+    ->onlyPages('1-5')
+    ->split('pages/page-{page}.pdf');
 ```
 
 ### Rotating Pages
@@ -204,7 +223,7 @@ Collate::open('confidential.pdf')
     ->save('protected.pdf');
 ```
 
-For more control, use separate user and owner passwords:
+For more control, use separate user and owner passwords and restrict specific permissions:
 
 ```php
 Collate::open('confidential.pdf')
@@ -213,9 +232,22 @@ Collate::open('confidential.pdf')
         ownerPassword: 'full-access',
         bitLength: 256,
     )
-    ->restrict('print')
+    ->restrict('print', 'extract')
     ->save('locked.pdf');
 ```
+
+The following permissions can be passed to `restrict()`:
+
+| Permission | Effect |
+|---|---|
+| `print` | Disallow printing |
+| `modify` | Disallow modifications |
+| `extract` | Disallow text and image extraction |
+| `annotate` | Disallow adding annotations |
+| `assemble` | Disallow page assembly (inserting, rotating, etc.) |
+| `print-highres` | Disallow high-resolution printing |
+| `form` | Disallow filling in form fields |
+| `modify-other` | Disallow all other modifications |
 
 Decrypt a password-protected document:
 
@@ -256,10 +288,10 @@ Collate::open('large-report.pdf')
 
 ### Metadata
 
-Read metadata from an existing PDF:
+Read metadata from an existing PDF using `inspect()`:
 
 ```php
-$meta = Collate::open('document.pdf')->metadata();
+$meta = Collate::inspect('document.pdf')->metadata();
 
 $meta->title;        // 'Quarterly Report'
 $meta->author;       // 'Taylor Otwell'
@@ -284,10 +316,18 @@ Collate::open('document.pdf')
 
 ### Page Count
 
-Get the number of pages in a document:
+Get the number of pages in a document using `inspect()`:
 
 ```php
-$count = Collate::open('document.pdf')->pageCount();
+$count = Collate::inspect('document.pdf')->pageCount();
+```
+
+`pageCount()` and `metadata()` are also available on the builder if you need them mid-chain:
+
+```php
+Collate::open('document.pdf')
+    ->when(fn ($pdf) => $pdf->pageCount() > 10, fn ($pdf) => $pdf->onlyPages('1-10'))
+    ->save('capped.pdf');
 ```
 
 ## Saving & Responses
@@ -296,6 +336,16 @@ $count = Collate::open('document.pdf')->pageCount();
 
 ```php
 Collate::open('input.pdf')->save('output.pdf');
+```
+
+You can save to a different disk than the one used to read the source by passing a disk name as the second argument:
+
+```php
+// Read from local, save to S3
+Collate::open('input.pdf')->save('reports/output.pdf', disk: 's3');
+
+// Read from S3, save back to local
+Collate::disk('s3')->open('input.pdf')->save('output.pdf', disk: 'local');
 ```
 
 ### Download
@@ -316,7 +366,7 @@ return Collate::open('invoice.pdf')->stream('invoice-2024-001.pdf');
 
 ### Raw Content
 
-Get the raw PDF contents as a string (useful for APIs, email attachments, or custom storage):
+Get the raw PDF binary contents as a string. Useful for APIs, email attachments, or custom storage:
 
 ```php
 $content = Collate::open('document.pdf')->content();
