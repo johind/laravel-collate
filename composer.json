@@ -34,7 +34,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Johind\\Collate\\": "src/",
+            "Johind\\Collate\\": "src/"
         }
     },
     "autoload-dev": {
