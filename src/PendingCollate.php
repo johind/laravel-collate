@@ -5,6 +5,7 @@ namespace Johind\Collate;
 use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -95,9 +96,10 @@ class PendingCollate implements Responsable
     protected array $tempInputFiles = [];
 
     public function __construct(
-        protected Collate $collate,
+        protected Collate        $collate,
         string|UploadedFile|null $source = null,
-    ) {
+    )
+    {
         if ($source !== null) {
             $this->source = $this->resolveFilePath($source);
         }
@@ -113,11 +115,12 @@ class PendingCollate implements Responsable
      */
     public function addPage(
         string|UploadedFile $file,
-        ?int $pageNumber = null,
-    ): static {
+        ?int                $pageNumber = null,
+    ): static
+    {
         $this->additions[] = [
             'file' => $this->resolveFilePath($file),
-            'pages' => $pageNumber !== null ? (string) $pageNumber : null,
+            'pages' => $pageNumber !== null ? (string)$pageNumber : null,
         ];
 
         return $this;
@@ -128,8 +131,9 @@ class PendingCollate implements Responsable
      */
     public function addPages(
         string|array|UploadedFile $files,
-        ?string $range = null,
-    ): static {
+        ?string                   $range = null,
+    ): static
+    {
         if (is_array($files)) {
             foreach ($files as $file) {
                 $this->addPage($file);
@@ -159,16 +163,36 @@ class PendingCollate implements Responsable
      */
     public function removePages(string|array $pages): static
     {
-        if (is_array($pages)) {
-            $pages = implode(',', $pages);
+        // Normalize the input into a clean, sorted array of integers,
+        // so we can process the gaps sequentially from start to finish.
+        $pagesToRemove = is_array($pages) ? $pages : explode(',', $pages);
+        $pagesToRemove = array_map('intval', $pagesToRemove);
+        sort($pagesToRemove);
+
+        $keepRanges = [];
+        $start = 1;
+
+        // qpdf does not support negative page exclusions (like "!5").
+        // We must calculate the positive blocks of pages we want to KEEP.
+        // For example: To remove page 3, we must tell qpdf to keep "1-2" and "4-z".
+        foreach ($pagesToRemove as $skipPage) {
+            if ($skipPage > $start) {
+                $endOfKeepRange = $skipPage - 1;
+
+                $keepRanges[] = ($start === $endOfKeepRange)
+                    ? (string)$start
+                    : "{$start}-{$endOfKeepRange}";
+            }
+
+            // Move our internal pointer to the page immediately after the one we just skipped.
+            $start = $skipPage + 1;
         }
 
-        // qpdf doesn't have "remove", we invert to a "keep everything except" selection.
-        if ($this->pageSelection !== null && str_starts_with($this->pageSelection, '1-z,')) {
-            $this->pageSelection .= ",!{$pages}";
-        } else {
-            $this->pageSelection = "1-z,!{$pages}";
-        }
+        // Always append the remainder of the document.
+        // 'z' is qpdf's variable for the final page of the document.
+        $keepRanges[] = "{$start}-z";
+
+        $this->pageSelection = implode(',', $keepRanges);
 
         return $this;
     }
@@ -191,11 +215,12 @@ class PendingCollate implements Responsable
      * Encrypt the document and restrict permissions.
      */
     public function encrypt(
-        string $userPassword,
+        string  $userPassword,
         ?string $ownerPassword = null,
-        int $bitLength = 256,
-    ): static {
-        if (! in_array($bitLength, [40, 128, 256], true)) {
+        int     $bitLength = 256,
+    ): static
+    {
+        if (!in_array($bitLength, [40, 128, 256], true)) {
             throw new \InvalidArgumentException(
                 "Encryption bit length must be 40, 128, or 256. Got: {$bitLength}",
             );
@@ -245,7 +270,7 @@ class PendingCollate implements Responsable
      */
     public function rotate(int $degrees, string $pages = '1-z'): static
     {
-        if (! in_array($degrees, [0, 90, 180, 270], true)) {
+        if (!in_array($degrees, [0, 90, 180, 270], true)) {
             throw new \InvalidArgumentException(
                 "Rotation degrees must be 0, 90, 180, or 270. Got: {$degrees}",
             );
@@ -301,19 +326,18 @@ class PendingCollate implements Responsable
         $result = Process::run([
             $this->collate->binaryPath(),
             '--json',
-            '--json-key=objects',
             $this->source,
         ]);
 
         $json = json_decode($result->output(), true);
         $info = [];
-        $objects = $json['objects'] ?? [];
 
-        // The trailer tells us which object ID holds the /Info dictionary
-        $infoRef = $objects['trailer']['/Info'] ?? null;
+        // Trailer is at the root, and the value is inside 'dict'
+        $infoRef = $json['trailer']['dict']['/Info'] ?? null;
 
-        if ($infoRef && isset($objects[$infoRef])) {
-            foreach ($objects[$infoRef] as $field => $meta) {
+        // $infoRef will look like "obj:1 0 R". We use that to look up the object.
+        if ($infoRef && isset($json['objects'][$infoRef]['value'])) {
+            foreach ($json['objects'][$infoRef]['value'] as $field => $meta) {
                 if (is_string($meta)) {
                     $info[$field] = $meta;
                 } elseif (is_array($meta) && isset($meta['value'])) {
@@ -333,7 +357,8 @@ class PendingCollate implements Responsable
         ?string $author = null,
         ?string $subject = null,
         ?string $keywords = null,
-    ): static {
+    ): static
+    {
         foreach (
             compact('title', 'author', 'subject', 'keywords') as $key => $value
         ) {
@@ -360,7 +385,7 @@ class PendingCollate implements Responsable
             $this->source,
         ]);
 
-        return (int) trim($result->output());
+        return (int)trim($result->output());
     }
 
     /**
@@ -383,7 +408,8 @@ class PendingCollate implements Responsable
      */
     public function download(
         string $filename = 'document.pdf',
-    ): StreamedResponse {
+    ): StreamedResponse
+    {
         return $this->toResponse(request(), $filename, 'attachment');
     }
 
@@ -414,17 +440,17 @@ class PendingCollate implements Responsable
      *
      * The path may contain a {page} placeholder for the page number.
      *
-     * @return \Illuminate\Support\Collection<int, string>
+     * @return Collection<int, string>
      */
-    public function split(string $path): \Illuminate\Support\Collection
+    public function split(string $path): Collection
     {
         $dir = $this->collate->tempDirectory();
 
-        if (! is_dir($dir)) {
+        if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
 
-        $prefix = $dir.'/'.Str::uuid();
+        $prefix = $dir . '/' . Str::uuid();
         $command = [$this->collate->binaryPath()];
 
         if ($this->decryptPassword !== null) {
@@ -443,7 +469,7 @@ class PendingCollate implements Responsable
         try {
             $result = Process::run($command);
 
-            if (! $result->successful()) {
+            if (!$result->successful()) {
                 throw new ProcessFailedException(
                     "Collate: qpdf split failed — {$result->errorOutput()}",
                     $result->exitCode(),
@@ -456,7 +482,7 @@ class PendingCollate implements Responsable
             $page = 1;
 
             while (file_exists($tempFile = "{$prefix}-{$page}.pdf")) {
-                $destination = str_replace('{page}', (string) $page, $path);
+                $destination = str_replace('{page}', (string)$page, $path);
                 $disk->put($destination, file_get_contents($tempFile));
                 @unlink($tempFile);
 
@@ -477,7 +503,8 @@ class PendingCollate implements Responsable
         $request,
         ?string $filename = null,
         string $disposition = 'inline',
-    ): StreamedResponse {
+    ): StreamedResponse
+    {
         $filename ??= 'document.pdf';
         $tempOutput = $this->process();
 
@@ -505,7 +532,7 @@ class PendingCollate implements Responsable
         try {
             $result = Process::run($command);
 
-            if (! $result->successful()) {
+            if (!$result->successful()) {
                 @unlink($tempOutput);
                 throw new ProcessFailedException(
                     "Collate: qpdf failed — {$result->errorOutput()}",
@@ -514,7 +541,7 @@ class PendingCollate implements Responsable
                 );
             }
 
-            if (! empty($this->metadata)) {
+            if (!empty($this->metadata)) {
                 $this->applyMetadata($tempOutput);
             }
 
@@ -529,24 +556,50 @@ class PendingCollate implements Responsable
      */
     protected function applyMetadata(string $file): void
     {
-        $jsonFile = $file.'.json';
+        $jsonFile = $file . '.json';
 
         $infoFields = [];
         foreach ($this->metadata as $key => $value) {
-            $infoFields["/{$key}"] = [
-                'value' => "({$value})",
-                'type' => '/string',
-            ];
+            $infoFields["/{$key}"] = $value; // qpdf can usually take direct strings for updates if formatted correctly
+        }
+
+        $readResult = Process::run([
+            $this->collate->binaryPath(),
+            '--json',
+            $file,
+        ]);
+
+        $existing = json_decode($readResult->output(), true);
+        $objects = $existing['objects'] ?? [];
+
+        // Correct trailer path
+        $infoRef = $existing['trailer']['dict']['/Info'] ?? null;
+
+        $qpdfObjects = [];
+
+        if ($infoRef) {
+            $qpdfObjects[$infoRef] = ['value' => $infoFields];
+        } else {
+            $maxId = 0;
+            foreach (array_keys($objects) as $key) {
+                // Correct regex to account for "obj:" prefix
+                if (preg_match('/^obj:(\d+) \d+ R$/', $key, $matches)) {
+                    $maxId = max($maxId, (int)$matches[1]);
+                }
+            }
+            $newId = $maxId + 1;
+            $newRef = "obj:{$newId} 0 R"; // The key must include obj:
+            $trailerRef = "{$newId} 0 R"; // The trailer reference doesn't use obj:
+
+            $qpdfObjects[$newRef] = ['value' => $infoFields];
+            $qpdfObjects['trailer'] = ['dict' => ['/Info' => $trailerRef]];
         }
 
         $json = json_encode([
+            // Wrap the objects map correctly for qpdf update-from-json
             'qpdf' => [
                 ['jsonversion' => 2, 'pushedinheritedpageresources' => false],
-                [
-                    'objects' => [
-                        'trailer.Info' => ['value' => $infoFields],
-                    ],
-                ],
+                ['objects' => $qpdfObjects]
             ],
         ]);
 
@@ -555,13 +608,13 @@ class PendingCollate implements Responsable
         $result = Process::run([
             $this->collate->binaryPath(),
             $file,
-            '--update-from-json='.$jsonFile,
+            '--update-from-json=' . $jsonFile,
             '--replace-input',
         ]);
 
         @unlink($jsonFile);
 
-        if (! $result->successful()) {
+        if (!$result->successful()) {
             throw new ProcessFailedException(
                 "Collate: failed to set metadata — {$result->errorOutput()}",
                 $result->exitCode(),
@@ -584,9 +637,10 @@ class PendingCollate implements Responsable
      * @return list<string>
      */
     protected function buildCommand(
-        string $outputPath,
+        string  $outputPath,
         ?string $pageOverride = null,
-    ): array {
+    ): array
+    {
         $command = [$this->collate->binaryPath()];
 
         if ($this->decryptPassword !== null) {
@@ -615,7 +669,7 @@ class PendingCollate implements Responsable
             }
 
             $command[] = '--';
-        } elseif (! empty($this->additions)) {
+        } elseif (!empty($this->additions)) {
             $command[] = '--pages';
 
             foreach ($this->additions as $addition) {
@@ -636,13 +690,13 @@ class PendingCollate implements Responsable
             $command[] = '--encrypt';
             $command[] = $this->encryption['user_password'];
             $command[] = $this->encryption['owner_password'];
-            $command[] = (string) $this->encryption['bit_length'];
+            $command[] = (string)$this->encryption['bit_length'];
 
-            if (! empty($this->restrictions)) {
+            if (!empty($this->restrictions)) {
                 $command[] = '--modify=none';
 
                 foreach ($this->restrictions as $restriction) {
-                    $command[] = "--{$restriction}=n";
+                    $command[] = "--{$restriction}=none";
                 }
             }
 
@@ -741,10 +795,10 @@ class PendingCollate implements Responsable
     {
         $dir = $this->collate->tempDirectory();
 
-        if (! is_dir($dir)) {
+        if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
 
-        return $dir.'/'.Str::uuid().'.pdf';
+        return $dir . '/' . Str::uuid() . '.pdf';
     }
 }
