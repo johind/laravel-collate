@@ -57,13 +57,9 @@ use Johind\Collate\Facades\Collate;
 $pending = Collate::open('invoices/2024-001.pdf');
 ```
 
-Files are resolved from your configured filesystem disk. You can also pass absolute paths or `UploadedFile` instances:
+Files are resolved from your configured filesystem disk. You can also pass `UploadedFile` instances:
 
 ```php
-// Absolute path
-Collate::open('/tmp/uploaded.pdf');
-
-// Uploaded file
 Collate::open($request->file('document'));
 ```
 
@@ -85,6 +81,15 @@ Collate::merge(
     'documents/chapter-1.pdf',
     'documents/chapter-2.pdf',
 )->save('documents/book.pdf');
+```
+
+For more control, pass a closure to select specific pages:
+
+```php
+Collate::merge(function ($pdf) {
+    $pdf->addPage('documents/cover.pdf');
+    $pdf->addPages('documents/appendix.pdf', range: '1-3');
+})->save('documents/book.pdf');
 ```
 
 ### Adding Pages
@@ -208,7 +213,7 @@ Collate::open('confidential.pdf')
         ownerPassword: 'full-access',
         bitLength: 256,
     )
-    ->preventPrinting()
+    ->restrict('print')
     ->save('locked.pdf');
 ```
 
@@ -270,7 +275,7 @@ Set metadata on the output document:
 
 ```php
 Collate::open('document.pdf')
-    ->setMetadata(
+    ->withMetadata(
         title: 'Annual Report 2024',
         author: 'Taylor Otwell',
     )
@@ -309,12 +314,12 @@ Display the PDF inline in the browser:
 return Collate::open('invoice.pdf')->stream('invoice-2024-001.pdf');
 ```
 
-### Base64
+### Raw Content
 
-Encode the result as a base64 string (useful for APIs or email attachments):
+Get the raw PDF contents as a string (useful for APIs, email attachments, or custom storage):
 
 ```php
-$base64 = Collate::open('document.pdf')->toBase64();
+$content = Collate::open('document.pdf')->content();
 ```
 
 ### Returning from Controllers
