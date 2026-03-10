@@ -644,6 +644,14 @@ class PendingCollate implements Responsable
             $file,
         ]);
 
+        if (! $readResult->successful()) {
+            throw new ProcessFailedException(
+                "Collate: failed to read PDF for metadata update — {$readResult->errorOutput()}",
+                $readResult->exitCode(),
+                $readResult->errorOutput(),
+            );
+        }
+
         $existing = json_decode($readResult->output(), true);
         $objects = $existing['objects'] ?? [];
 
@@ -834,7 +842,9 @@ class PendingCollate implements Responsable
     {
         $tempPath = $this->tempFilePath();
 
-        file_put_contents($tempPath, $disk->get($file));
+        // Use a stream rather than file_get_contents to avoid loading the
+        // entire remote file into PHP memory before writing it to disk.
+        file_put_contents($tempPath, $disk->readStream($file));
 
         $this->tempInputFiles[] = $tempPath;
 
