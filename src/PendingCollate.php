@@ -2,12 +2,14 @@
 
 namespace Johind\Collate;
 
+use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Conditionable;
+use Johind\Collate\Exceptions\ProcessFailedException;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -293,7 +295,7 @@ class PendingCollate implements Responsable
     public function metadata(): PdfMetadata
     {
         if ($this->source === null) {
-            throw new \RuntimeException('Collate: cannot read metadata without a source file. Use open() first.');
+            throw new \BadMethodCallException('Collate: cannot read metadata without a source file. Use open() first.');
         }
 
         $result = Process::run([
@@ -348,7 +350,7 @@ class PendingCollate implements Responsable
     public function pageCount(): int
     {
         if ($this->source === null) {
-            throw new \RuntimeException('Collate: cannot count pages without a source file. Use open() first.');
+            throw new \BadMethodCallException('Collate: cannot count pages without a source file. Use open() first.');
         }
 
         $result = Process::run([
@@ -441,8 +443,10 @@ class PendingCollate implements Responsable
             $result = Process::run($command);
 
             if (! $result->successful()) {
-                throw new \RuntimeException(
+                throw new ProcessFailedException(
                     "Collate: qpdf split failed — {$result->errorOutput()}",
+                    $result->exitCode(),
+                    $result->errorOutput(),
                 );
             }
 
@@ -502,8 +506,10 @@ class PendingCollate implements Responsable
 
             if (! $result->successful()) {
                 @unlink($tempOutput);
-                throw new \RuntimeException(
+                throw new ProcessFailedException(
                     "Collate: qpdf failed — {$result->errorOutput()}",
+                    $result->exitCode(),
+                    $result->errorOutput(),
                 );
             }
 
@@ -555,8 +561,10 @@ class PendingCollate implements Responsable
         @unlink($jsonFile);
 
         if (! $result->successful()) {
-            throw new \RuntimeException(
+            throw new ProcessFailedException(
                 "Collate: failed to set metadata — {$result->errorOutput()}",
+                $result->exitCode(),
+                $result->errorOutput(),
             );
         }
     }
@@ -684,7 +692,7 @@ class PendingCollate implements Responsable
             $path = $file->getRealPath();
 
             if ($path === false) {
-                throw new \RuntimeException('Collate: the uploaded file is no longer available on disk.');
+                throw new FileNotFoundException('Collate: the uploaded file is no longer available on disk.');
             }
 
             return $path;
