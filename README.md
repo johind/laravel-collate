@@ -86,6 +86,8 @@ Collate::merge(
 For more control, pass a closure to select specific pages:
 
 ```php
+use Johind\Collate\PendingCollate;
+
 Collate::merge(function (PendingCollate $pdf) {
     $pdf->addPage('documents/cover.pdf');
     $pdf->addPages('documents/appendix.pdf', range: '1-3');
