@@ -2,17 +2,17 @@
 
 namespace Johind\Collate;
 
-class PdfMetadata
+readonly class PdfMetadata
 {
     public function __construct(
-        public readonly ?string $title = null,
-        public readonly ?string $author = null,
-        public readonly ?string $subject = null,
-        public readonly ?string $keywords = null,
-        public readonly ?string $creator = null,
-        public readonly ?string $producer = null,
-        public readonly ?string $creationDate = null,
-        public readonly ?string $modDate = null,
+        public ?string $title = null,
+        public ?string $author = null,
+        public ?string $subject = null,
+        public ?string $keywords = null,
+        public ?string $creator = null,
+        public ?string $producer = null,
+        public ?string $creationDate = null,
+        public ?string $modDate = null,
     ) {}
 
     /**
