@@ -39,8 +39,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Johind\\Collate\\Tests\\": "tests/",
-            "Workbench\\App\\": "workbench/app/"
+            "Johind\\Collate\\Tests\\": "tests/"
         }
     },
     "scripts": {
