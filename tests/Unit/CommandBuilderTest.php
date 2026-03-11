@@ -20,7 +20,7 @@ describe('input file', function () {
     });
 
     it('uses the source as the primary input even when there are additions', function () {
-        $pending = makeCollate()->open('source.pdf')->addPage('addition.pdf');
+        $pending = makeCollate()->open('source.pdf')->addPages('addition.pdf');
         $command = buildCommand($pending);
         $sourcePath = Storage::path('source.pdf');
 
@@ -66,7 +66,7 @@ describe('--pages block', function () {
     });
 
     it('appends addition files after the source in the --pages block', function () {
-        $pending = makeCollate()->open('source.pdf')->addPage('addition.pdf');
+        $pending = makeCollate()->open('source.pdf')->addPages('addition.pdf');
         $command = buildCommand($pending);
         $additionPath = Storage::path('addition.pdf');
 

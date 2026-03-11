@@ -58,7 +58,7 @@ class Collate
             if ($file instanceof Closure) {
                 $file($pending);
             } else {
-                $pending->addPage($file);
+                $pending->addPages($file);
             }
         }
 

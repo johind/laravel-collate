@@ -46,7 +46,7 @@ it('local disk files are not added to tempInputFiles', function () {
 it('resolveFilePath can be called directly for an addition file', function () {
     Storage::put('addition.pdf', file_get_contents(fixturePath('single-page.pdf')));
 
-    $pending = makeCollate()->open('doc.pdf')->addPage('addition.pdf');
+    $pending = makeCollate()->open('doc.pdf')->addPages('addition.pdf');
 
     $additions = getProperty($pending, 'additions');
     $additionPath = $additions[0]['file'];
@@ -57,7 +57,7 @@ it('resolveFilePath can be called directly for an addition file', function () {
 it('addition files on local disks are not added to tempInputFiles', function () {
     Storage::put('addition.pdf', file_get_contents(fixturePath('single-page.pdf')));
 
-    $pending = makeCollate()->open('doc.pdf')->addPage('addition.pdf');
+    $pending = makeCollate()->open('doc.pdf')->addPages('addition.pdf');
 
     expect(getProperty($pending, 'tempInputFiles'))->toBeEmpty();
 });

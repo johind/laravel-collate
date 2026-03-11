@@ -2,6 +2,17 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.2.0 - 2026-03-11
+
+This release improves API consistency by strictly enforcing single-page semantics for the `addPage` method.
+
+### Changed (Breaking API Update)
+- The `addPage()` method now strictly requires a `$pageNumber` parameter. It no longer silently accepts whole documents.
+- The `addPages()` method has been refactored to eliminate recursion, improving performance and establishing a single source of truth for file resolution.
+
+### Upgrade Guide
+If you were previously using `addPage('file.pdf')` to add an entire document, you must update your code to use the plural method `addPages('file.pdf')` instead.
+
 ## 1.1.0 - 2026-03-11
 
 This release addresses critical boundary bugs in page selection, improves compatibility with modern versions of `qpdf`, and enhances the extensibility of the builder.

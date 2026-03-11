@@ -32,7 +32,7 @@ it('inspect() followed by pageCount() does not hit real processes', function () 
 
 it('sums page counts from source and additions', function () {
     $fake = new Johind\Collate\CollateFake;
-    $pending = $fake->open('a.pdf')->addPage('b.pdf');
+    $pending = $fake->open('a.pdf')->addPages('b.pdf');
 
     // source (3 pages) + addition (3 pages) = 6
     expect($pending->pageCount())->toBe(6);
@@ -40,7 +40,7 @@ it('sums page counts from source and additions', function () {
 
 it('split() returns correctly sized collection based on total pages', function () {
     $fake = new Johind\Collate\CollateFake;
-    $pending = $fake->open('a.pdf')->addPage('b.pdf');
+    $pending = $fake->open('a.pdf')->addPages('b.pdf');
 
     $paths = $pending->split('page-{page}.pdf');
 

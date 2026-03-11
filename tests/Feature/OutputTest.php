@@ -163,7 +163,7 @@ describe('decrypt()', function () {
     it('processes an encrypted source with additions', function () {
         makeCollate()->open('encrypted.pdf')
             ->decrypt('test')
-            ->addPage('input.pdf')
+            ->addPages('input.pdf')
             ->save('merged.pdf');
 
         expect(Storage::exists('merged.pdf'))->toBeTrue();

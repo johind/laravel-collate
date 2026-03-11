@@ -132,48 +132,42 @@ class PendingCollate implements Responsable
     }
 
     /**
-     * Add a complete file, or a single page from a file.
+     * Add a single page from a file.
      */
     public function addPage(
         string|UploadedFile $file,
-        ?int $pageNumber = null,
+        int $pageNumber,
     ): static {
-        $this->additions[] = [
-            'file' => $this->resolveFilePath($file),
-            'pages' => $pageNumber !== null ? (string) $pageNumber : null,
-        ];
-
-        return $this;
+        return $this->addPages(
+            $file,
+            (string) $pageNumber,
+        );
     }
 
     /**
      * Add a range of pages from a file, or multiple files at once.
      *
-     * @param  string|array<int, string|\Illuminate\Http\UploadedFile>|\Illuminate\Http\UploadedFile  $files
+     * @param  string|array<int, string|UploadedFile>|UploadedFile  $files
      */
     public function addPages(
         string|array|UploadedFile $files,
         ?string $range = null,
     ): static {
-        if (is_array($files)) {
-            if ($range !== null) {
-                throw new \InvalidArgumentException(
-                    'Cannot use range parameter when adding multiple files. '
-                    .'Chain multiple addPages() calls with range instead.'
-                );
-            }
-
-            foreach ($files as $file) {
-                $this->addPage($file);
-            }
-
-            return $this;
+        if (is_array($files) && $range !== null) {
+            throw new \InvalidArgumentException(
+                'Cannot use range parameter when adding multiple files. '
+                .'Chain multiple addPages() calls with range instead.'
+            );
         }
 
-        $this->additions[] = [
-            'file' => $this->resolveFilePath($files),
-            'pages' => $range,
-        ];
+        $files = is_array($files) ? $files : [$files];
+
+        foreach ($files as $file) {
+            $this->additions[] = [
+                'file' => $this->resolveFilePath($file),
+                'pages' => $range,
+            ];
+        }
 
         return $this;
     }

@@ -90,7 +90,7 @@ describe('merge()', function () {
 
     it('closure receives and can mutate the pending instance', function () {
         $pending = makeCollate()->merge(function (PendingCollate $pdf) {
-            $pdf->addPage('doc.pdf');
+            $pdf->addPages('doc.pdf');
         });
 
         expect(getProperty($pending, 'additions'))->toHaveCount(1);

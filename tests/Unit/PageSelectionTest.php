@@ -131,6 +131,16 @@ it('removePage() delegates correctly to removePages()', function () {
     expect(getProperty($pending, 'pageSelection'))->toBe('1-2,4-z');
 });
 
+describe('addPage()', function () {
+    it('delegates correctly to addPages() with explicit page number', function () {
+        $pending = makeCollate()->open('doc.pdf')->addPage('doc.pdf', 5);
+        $additions = getProperty($pending, 'additions');
+
+        expect($additions)->toHaveCount(1)
+            ->and($additions[0]['pages'])->toBe('5');
+    });
+});
+
 describe('addPages()', function () {
     it('throws when an array of files is combined with a range', function () {
         expect(fn () => makeCollate()->open('doc.pdf')
