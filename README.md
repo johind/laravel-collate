@@ -324,12 +324,12 @@ Get the number of pages in a document using `inspect()`:
 $count = Collate::inspect('document.pdf')->pageCount();
 ```
 
-`pageCount()` and `metadata()` are also available on the builder if you need them mid-chain:
+`pageCount()` and `metadata()` are also available on the builder if you need them mid-chain, even after a `merge()`:
 
 ```php
-Collate::open('document.pdf')
-    ->when(fn ($pdf) => $pdf->pageCount() > 10, fn ($pdf) => $pdf->onlyPages('1-10'))
-    ->save('capped.pdf');
+Collate::merge('doc1.pdf', 'doc2.pdf')
+    ->when(fn ($pdf) => $pdf->pageCount() > 10, fn ($pdf) => $pdf->rotate(90))
+    ->save('merged.pdf');
 ```
 
 ## Saving & Responses

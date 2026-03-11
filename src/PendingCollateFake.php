@@ -167,17 +167,21 @@ class PendingCollateFake extends PendingCollate
     public function split(string $path): Collection
     {
         $this->wasSplit = true;
+        $count = $this->pageCount();
 
-        return collect([
-            str_replace('{page}', '1', $path),
-            str_replace('{page}', '2', $path),
-            str_replace('{page}', '3', $path),
-        ]);
+        return collect(range(1, $count))->map(fn ($page) =>
+            str_replace('{page}', (string) $page, $path)
+        );
     }
 
     public function pageCount(): int
     {
-        return 3;
+        // In the fake, we assume every file contains 3 pages so that
+        // it remains consistent with split() and reflects the summing
+        // behavior of the real implementation.
+        $files = ($this->source !== null ? 1 : 0) + count($this->additions);
+
+        return $files * 3;
     }
 
     public function toResponse($request, ?string $filename = null, string $disposition = 'inline'): StreamedResponse
