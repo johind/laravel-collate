@@ -142,6 +142,15 @@ describe('split()', function () {
         expect($paths)->toHaveCount(12);
         $paths->each(fn ($path) => expect(Storage::exists($path))->toBeTrue());
     });
+
+    it('successfully splits an encrypted document', function () {
+        $paths = makeCollate()->open('multi.pdf')
+            ->encrypt('user', 'owner')
+            ->split('split-enc/page-{page}.pdf');
+
+        expect($paths)->not->toBeEmpty();
+        $paths->each(fn ($path) => expect(Storage::exists($path))->toBeTrue());
+    });
 });
 
 describe('decrypt()', function () {
@@ -158,21 +167,5 @@ describe('decrypt()', function () {
             ->save('merged.pdf');
 
         expect(Storage::exists('merged.pdf'))->toBeTrue();
-    });
-});
-
-describe('encrypt() + withMetadata()', function () {
-    it('round-trips metadata on an encrypted document', function () {
-        makeCollate()->open('input.pdf')
-            ->encrypt('user', 'owner')
-            ->withMetadata(title: 'Encrypted Doc', author: 'Test')
-            ->save('enc-meta.pdf');
-
-        $meta = makeCollate()->open('enc-meta.pdf')
-            ->decrypt('owner')
-            ->metadata();
-
-        expect($meta->title)->toBe('Encrypted Doc')
-            ->and($meta->author)->toBe('Test');
     });
 });

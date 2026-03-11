@@ -491,14 +491,30 @@ class PendingCollate implements Responsable
     }
 
     /**
-     * Get the number of pages in the source document.
+     * Get the number of pages in the output document.
      */
     public function pageCount(): int
     {
-        if ($this->source === null) {
-            throw new \BadMethodCallException('Collate: cannot count pages without a source file. Use open() or inspect() first.');
+        $total = 0;
+
+        if ($this->source !== null) {
+            $count = $this->getFilePageCount($this->source);
+            $total += $this->calculateSelectedPageCount($count, $this->pageSelection);
         }
 
+        foreach ($this->additions as $addition) {
+            $count = $this->getFilePageCount($addition['file']);
+            $total += $this->calculateSelectedPageCount($count, $addition['pages']);
+        }
+
+        return $total;
+    }
+
+    /**
+     * Get the page count of a specific file.
+     */
+    protected function getFilePageCount(string $file): int
+    {
         $command = [
             $this->collate->binaryPath(),
             '--show-npages',
@@ -508,19 +524,61 @@ class PendingCollate implements Responsable
             $command[] = "--password={$this->decryptPassword}";
         }
 
-        $command[] = $this->source;
+        $command[] = $file;
 
         $result = Process::run($command);
 
         if (! $result->successful()) {
             throw new ProcessFailedException(
-                "Collate: failed to count pages — {$result->errorOutput()}",
+                "Collate: failed to count pages for file '{$file}' — {$result->errorOutput()}",
                 $result->exitCode(),
                 $result->errorOutput(),
             );
         }
 
         return (int) trim($result->output());
+    }
+
+    /**
+     * Calculate how many pages a selection string would produce from a file.
+     */
+    protected function calculateSelectedPageCount(int $totalInFile, ?string $selection): int
+    {
+        if ($selection === null || $selection === '1-z') {
+            return $totalInFile;
+        }
+
+        $count = 0;
+        $items = explode(',', $selection);
+
+        foreach ($items as $item) {
+            $item = trim($item);
+
+            if (str_contains($item, '-')) {
+                [$startStr, $endStr] = explode('-', $item, 2);
+                $start = ($startStr === 'z') ? $totalInFile : (int) $startStr;
+                $end = ($endStr === 'z') ? $totalInFile : (int) $endStr;
+
+                if ($startStr === 'z' || $endStr === 'z' || ($start <= $totalInFile)) {
+                    // qpdf supports reverse ranges like z-1, which results
+                    // in $totalInFile pages.
+                    if ($start > $end) {
+                        $count += ($start - $end + 1);
+                    } else {
+                        $actualStart = max(1, $start);
+                        $actualEnd = min($end, $totalInFile);
+                        $count += max(0, $actualEnd - $actualStart + 1);
+                    }
+                }
+            } else {
+                $page = ($item === 'z') ? $totalInFile : (int) $item;
+                if ($page >= 1 && $page <= $totalInFile) {
+                    $count++;
+                }
+            }
+        }
+
+        return $count;
     }
 
     /**
@@ -607,7 +665,17 @@ class PendingCollate implements Responsable
         $processedFile = $this->process();
 
         $prefix = $dir.'/'.Str::uuid();
-        $command = [$this->collate->binaryPath(), $processedFile, '--split-pages', "{$prefix}-%d.pdf"];
+        $command = [$this->collate->binaryPath()];
+
+        if ($this->encryption) {
+            $command[] = "--password={$this->encryption['owner_password']}";
+        }
+
+        $command[] = $processedFile;
+        $command[] = '--split-pages';
+        $command[] = "{$prefix}-%d.pdf";
+
+        $splitFiles = [];
 
         try {
             $result = Process::run($command);
@@ -626,7 +694,7 @@ class PendingCollate implements Responsable
             // qpdf's %d produces zero-padded page numbers (e.g. "01", "02"),
             // so we use glob to discover the actual filenames instead of
             // guessing the format with an incrementing integer counter.
-            $splitFiles = glob("{$prefix}-*.pdf");
+            $splitFiles = glob("{$prefix}-*.pdf") ?: [];
             natsort($splitFiles);
 
             foreach ($splitFiles as $page => $tempFile) {
@@ -637,7 +705,6 @@ class PendingCollate implements Responsable
                 // memory — individual pages of a large document can still be
                 // several megabytes each.
                 $disk->put($destination, fopen($tempFile, 'r'));
-                @unlink($tempFile);
 
                 $paths->push($destination);
             }
@@ -645,6 +712,9 @@ class PendingCollate implements Responsable
             return $paths;
         } finally {
             @unlink($processedFile);
+            foreach ($splitFiles as $tempFile) {
+                @unlink($tempFile);
+            }
         }
     }
 
@@ -716,7 +786,9 @@ class PendingCollate implements Responsable
 
             return $tempOutput;
         } finally {
-            $this->cleanupTempInputFiles();
+            // We no longer clean up temp input files here, as it would break
+            // subsequent output calls (save(), content(), etc.) when using
+            // remote source files. Cleanup happens in __destruct().
         }
     }
 
