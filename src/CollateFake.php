@@ -2,6 +2,7 @@
 
 namespace Johind\Collate;
 
+use Closure;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use PHPUnit\Framework\Assert as PHPUnit;
@@ -51,12 +52,12 @@ class CollateFake extends Collate
     /**
      * Merge multiple PDFs into a single document.
      */
-    public function merge(\Closure|string|UploadedFile ...$files): PendingCollateFake
+    public function merge(Closure|string|UploadedFile ...$files): PendingCollateFake
     {
         $pending = new PendingCollateFake($this);
 
         foreach ($files as $file) {
-            if ($file instanceof \Closure) {
+            if ($file instanceof Closure) {
                 $file($pending);
             } else {
                 $pending->addPage($file);

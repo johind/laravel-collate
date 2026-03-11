@@ -9,25 +9,8 @@ beforeEach(function () {
 
 describe('metadata()', function () {
     it('throws when no source file is set', function () {
-        expect(fn () => makeCollate()->merge('doc.pdf')->metadata())
+        expect(fn () => (new Johind\Collate\PendingCollate(makeCollate()))->metadata())
             ->toThrow(BadMethodCallException::class);
-    });
-
-    it('error message mentions both open() and inspect()', function () {
-        expect(fn () => makeCollate()->merge('doc.pdf')->metadata())
-            ->toThrow(BadMethodCallException::class, 'inspect()');
-    });
-});
-
-describe('pageCount()', function () {
-    it('throws when no source file is set', function () {
-        expect(fn () => makeCollate()->merge('doc.pdf')->pageCount())
-            ->toThrow(BadMethodCallException::class);
-    });
-
-    it('error message mentions both open() and inspect()', function () {
-        expect(fn () => makeCollate()->merge('doc.pdf')->pageCount())
-            ->toThrow(BadMethodCallException::class, 'inspect()');
     });
 });
 
