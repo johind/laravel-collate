@@ -45,9 +45,21 @@ return [
 ];
 ```
 
+## Quick Example
+
+```php
+use Johind\Collate\Facades\Collate;
+
+Collate::open('contracts/draft.pdf')
+    ->addPages('contracts/appendix.pdf', range: '1-3')
+    ->overlay('assets/watermark.pdf')
+    ->encrypt('secret')
+    ->save('contracts/final.pdf');
+```
+
 ## Usage
 
-Collate provides two entry points — `open()` for working with and manipulating an existing PDF, and `merge()` for combining multiple files. For read-only operations such as inspecting metadata or counting pages, use `inspect()` instead. All three return a fluent builder that lets you chain operations before saving or returning a response.
+Collate provides two entry points — `open()` for working with and manipulating an existing PDF, and `merge()` for combining multiple files. For read-only operations such as inspecting metadata or counting pages, use `inspect()` instead — it's a semantic alias for `open()` that signals no mutations are intended. All three return a fluent builder that lets you chain operations before saving or returning a response.
 
 ### Opening a PDF
 
@@ -125,6 +137,8 @@ Collate::open('report.pdf')
     ->save('report-final.pdf');
 ```
 
+> **Note:** The `range` parameter cannot be used when passing an array of files. Chain multiple `addPages()` calls instead.
+
 ### Removing Pages
 
 Remove specific pages from a document:
@@ -158,6 +172,18 @@ Collate::open('document.pdf')
     ->onlyPages('1-5,8,11-z')
     ->save('selected-pages.pdf');
 ```
+
+Anywhere a page range string is accepted (`onlyPages()`, `addPages()`, `removePages()`, `rotate()`), you can use [qpdf range syntax](https://qpdf.readthedocs.io/en/stable/cli.html#page-ranges):
+
+| Expression | Meaning |
+|---|---|
+| `1-5` | Pages 1 through 5 |
+| `1,3,5` | Pages 1, 3, and 5 |
+| `1-3,7-9` | Pages 1–3 and 7–9 |
+| `z` | Last page |
+| `r1` | Last page (reverse notation) |
+| `r3-r1` | Last three pages |
+| `1-z` | All pages |
 
 Note: `onlyPages()` and `removePages()` are mutually exclusive — calling both on the same instance will throw a `BadMethodCallException`.
 
@@ -398,7 +424,19 @@ Collate::open('document.pdf')
 
 ## Extending with Macros
 
-Collate uses the `Macroable` trait, so you can add custom methods:
+Both `Collate` and `PendingCollate` use the `Macroable` trait, so you can add custom methods to either class. Register macros on `PendingCollate` to add chainable operations:
+
+```php
+use Johind\Collate\PendingCollate;
+
+PendingCollate::macro('stamp', function () {
+    return $this->overlay('assets/stamp.pdf');
+});
+
+Collate::open('contract.pdf')->stamp()->save('stamped.pdf');
+```
+
+Register macros on `Collate` to add new entry points:
 
 ```php
 use Johind\Collate\Collate;
@@ -417,6 +455,7 @@ Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed re
 ## Contributing
 
 I appreciate your help in keeping Collate stable! I'm primarily looking for contributions that focus on fixing bugs, improving error handling, or performance. If you have an idea for a new feature, please open an issue to discuss it with me first, as I want to keep the package's scope focused. Please note that I do not provide monetary compensation for contributions.
+
 ## Security
 
 If you discover a security vulnerability, please send an email rather than opening a GitHub issue.
