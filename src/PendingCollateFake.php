@@ -132,7 +132,7 @@ class PendingCollateFake extends PendingCollate
         return $this->wasSplit;
     }
 
-    public function save(string $path): bool
+    public function save(string $path, ?string $disk = null): bool
     {
         $this->savedTo = $path;
 
