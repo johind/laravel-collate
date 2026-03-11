@@ -48,3 +48,44 @@ it('split() returns correctly sized collection based on total pages', function (
         ->and($paths[0])->toBe('page-1.pdf')
         ->and($paths[5])->toBe('page-6.pdf');
 });
+
+describe('assertions', function () {
+    it('can assert that a PDF was saved', function () {
+        $fake = new Johind\Collate\CollateFake;
+        $fake->open('doc.pdf')->save('output.pdf');
+
+        $fake->assertSaved('output.pdf');
+        $fake->assertSaved(null, fn ($p) => $p->sourcePath() === 'doc.pdf');
+    });
+
+    it('can assert that a PDF was downloaded', function () {
+        $fake = new Johind\Collate\CollateFake;
+        $fake->open('doc.pdf')->download('download.pdf');
+
+        $fake->assertDownloaded('download.pdf');
+        $fake->assertDownloaded(null, fn ($p) => $p->sourcePath() === 'doc.pdf');
+    });
+
+    it('can assert that a PDF was streamed', function () {
+        $fake = new Johind\Collate\CollateFake;
+        $fake->open('doc.pdf')->stream('stream.pdf');
+
+        $fake->assertStreamed('stream.pdf');
+        $fake->assertStreamed(null, fn ($p) => $p->sourcePath() === 'doc.pdf');
+    });
+
+    it('can assert that nothing was saved, downloaded, or streamed', function () {
+        $fake = new Johind\Collate\CollateFake;
+
+        $fake->assertNothingSaved();
+        $fake->assertNothingDownloaded();
+        $fake->assertNothingStreamed();
+    });
+
+    it('can assert that a PDF was split', function () {
+        $fake = new Johind\Collate\CollateFake;
+        $fake->open('doc.pdf')->split('page-{page}.pdf');
+
+        $fake->assertSplit();
+    });
+});
