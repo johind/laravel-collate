@@ -169,8 +169,7 @@ class PendingCollateFake extends PendingCollate
         $this->wasSplit = true;
         $count = $this->pageCount();
 
-        return collect(range(1, $count))->map(fn ($page) =>
-            str_replace('{page}', (string) $page, $path)
+        return collect(range(1, $count))->map(fn ($page) => str_replace('{page}', (string) $page, $path)
         );
     }
 
