@@ -206,6 +206,12 @@ class PendingCollate implements Responsable
         foreach ($items as $item) {
             $item = trim((string) $item);
 
+            if ($item === '' || ! preg_match('/^\d+(-\d+)?$/', $item)) {
+                throw new \InvalidArgumentException(
+                    "Collate: '{$item}' is not a valid page number or range."
+                );
+            }
+
             if (str_contains($item, '-')) {
                 [$start, $end] = explode('-', $item, 2);
                 array_push($pagesToRemove, ...range((int) $start, (int) $end));
@@ -214,7 +220,16 @@ class PendingCollate implements Responsable
             }
         }
 
+        foreach ($pagesToRemove as $page) {
+            if ($page < 1) {
+                throw new \InvalidArgumentException(
+                    "Collate: page numbers must be at least 1. Got: {$page}."
+                );
+            }
+        }
+
         sort($pagesToRemove);
+        $pagesToRemove = array_unique($pagesToRemove);
 
         $keepRanges = [];
         $start = 1;
@@ -322,6 +337,7 @@ class PendingCollate implements Responsable
         }
 
         array_push($this->restrictions, ...$permissions);
+        $this->restrictions = array_values(array_unique($this->restrictions));
 
         return $this;
     }
@@ -394,11 +410,26 @@ class PendingCollate implements Responsable
             throw new \BadMethodCallException('Collate: cannot read metadata without a source file. Use open() or inspect() first.');
         }
 
-        $result = Process::run([
+        $command = [
             $this->collate->binaryPath(),
             '--json',
-            $this->source,
-        ]);
+        ];
+
+        if ($this->decryptPassword !== null) {
+            $command[] = "--password={$this->decryptPassword}";
+        }
+
+        $command[] = $this->source;
+
+        $result = Process::run($command);
+
+        if (! $result->successful()) {
+            throw new ProcessFailedException(
+                "Collate: failed to read PDF metadata — {$result->errorOutput()}",
+                $result->exitCode(),
+                $result->errorOutput(),
+            );
+        }
 
         $json = json_decode($result->output(), true);
         $qpdfObjects = $json['qpdf'][1] ?? [];
@@ -434,10 +465,25 @@ class PendingCollate implements Responsable
         ?string $author = null,
         ?string $subject = null,
         ?string $keywords = null,
+        ?string $creator = null,
+        ?string $producer = null,
+        ?string $creationDate = null,
+        ?string $modDate = null,
     ): static {
-        foreach (compact('title', 'author', 'subject', 'keywords') as $key => $value) {
+        $map = [
+            'Title' => $title,
+            'Author' => $author,
+            'Subject' => $subject,
+            'Keywords' => $keywords,
+            'Creator' => $creator,
+            'Producer' => $producer,
+            'CreationDate' => $creationDate,
+            'ModDate' => $modDate,
+        ];
+
+        foreach ($map as $key => $value) {
             if ($value !== null) {
-                $this->metadata[ucfirst($key)] = $value;
+                $this->metadata[$key] = $value;
             }
         }
 
@@ -453,11 +499,26 @@ class PendingCollate implements Responsable
             throw new \BadMethodCallException('Collate: cannot count pages without a source file. Use open() or inspect() first.');
         }
 
-        $result = Process::run([
+        $command = [
             $this->collate->binaryPath(),
             '--show-npages',
-            $this->source,
-        ]);
+        ];
+
+        if ($this->decryptPassword !== null) {
+            $command[] = "--password={$this->decryptPassword}";
+        }
+
+        $command[] = $this->source;
+
+        $result = Process::run($command);
+
+        if (! $result->successful()) {
+            throw new ProcessFailedException(
+                "Collate: failed to count pages — {$result->errorOutput()}",
+                $result->exitCode(),
+                $result->errorOutput(),
+            );
+        }
 
         return (int) trim($result->output());
     }
@@ -476,7 +537,13 @@ class PendingCollate implements Responsable
         try {
             // Use a stream rather than file_get_contents to avoid loading
             // the entire file into PHP memory, which would OOM on large PDFs.
-            return $disk->put($path, fopen($tempOutput, 'r'));
+            $stream = fopen($tempOutput, 'r');
+
+            if ($stream === false) {
+                throw new \RuntimeException("Collate: failed to open temp file for reading: {$tempOutput}");
+            }
+
+            return $disk->put($path, $stream);
         } finally {
             @unlink($tempOutput);
         }
@@ -507,7 +574,13 @@ class PendingCollate implements Responsable
         $tempOutput = $this->process();
 
         try {
-            return file_get_contents($tempOutput);
+            $content = file_get_contents($tempOutput);
+
+            if ($content === false) {
+                throw new \RuntimeException("Collate: failed to read temp file: {$tempOutput}");
+            }
+
+            return $content;
         } finally {
             @unlink($tempOutput);
         }
@@ -549,10 +622,16 @@ class PendingCollate implements Responsable
 
             $disk = Storage::disk($this->collate->diskName());
             $paths = collect();
-            $page = 1;
 
-            while (file_exists($tempFile = "{$prefix}-{$page}.pdf")) {
-                $destination = str_replace('{page}', (string) $page, $path);
+            // qpdf's %d produces zero-padded page numbers (e.g. "01", "02"),
+            // so we use glob to discover the actual filenames instead of
+            // guessing the format with an incrementing integer counter.
+            $splitFiles = glob("{$prefix}-*.pdf");
+            natsort($splitFiles);
+
+            foreach ($splitFiles as $page => $tempFile) {
+                $pageNumber = $page + 1;
+                $destination = str_replace('{page}', (string) $pageNumber, $path);
 
                 // Stream each page file to disk rather than loading it into
                 // memory — individual pages of a large document can still be
@@ -561,7 +640,6 @@ class PendingCollate implements Responsable
                 @unlink($tempFile);
 
                 $paths->push($destination);
-                $page++;
             }
 
             return $paths;
@@ -585,10 +663,13 @@ class PendingCollate implements Responsable
             function () use ($tempOutput) {
                 // Stream the file to the output buffer in chunks rather than
                 // reading the whole PDF into a PHP string first.
-                $stream = fopen($tempOutput, 'r');
-                fpassthru($stream);
-                fclose($stream);
-                @unlink($tempOutput);
+                try {
+                    $stream = fopen($tempOutput, 'r');
+                    fpassthru($stream);
+                    fclose($stream);
+                } finally {
+                    @unlink($tempOutput);
+                }
             },
             $filename,
             ['Content-Type' => 'application/pdf'],
@@ -625,7 +706,12 @@ class PendingCollate implements Responsable
             }
 
             if (! empty($this->metadata)) {
-                $this->applyMetadata($tempOutput);
+                try {
+                    $this->applyMetadata($tempOutput);
+                } catch (\Throwable $e) {
+                    @unlink($tempOutput);
+                    throw $e;
+                }
             }
 
             return $tempOutput;
@@ -647,11 +733,20 @@ class PendingCollate implements Responsable
             $infoFields["/{$key}"] = "u:{$value}";
         }
 
-        $readResult = Process::run([
+        $readCommand = [
             $this->collate->binaryPath(),
             '--json',
-            $file,
-        ]);
+        ];
+
+        // When the output has been encrypted, qpdf needs the owner password
+        // to read the file back for the metadata update.
+        if ($this->encryption) {
+            $readCommand[] = "--password={$this->encryption['owner_password']}";
+        }
+
+        $readCommand[] = $file;
+
+        $readResult = Process::run($readCommand);
 
         if (! $readResult->successful()) {
             throw new ProcessFailedException(
@@ -671,8 +766,12 @@ class PendingCollate implements Responsable
         $patch = [];
 
         if ($infoRef) {
-            // Update the existing info object directly.
-            $patch["obj:{$infoRef}"] = ['value' => $infoFields];
+            // Merge with existing values so that setting only e.g. Title
+            // does not wipe Author, Producer, CreationDate, etc.
+            $existingValues = $qpdfObjects["obj:{$infoRef}"]['value'] ?? [];
+            $mergedValues = array_replace($existingValues, $infoFields);
+
+            $patch["obj:{$infoRef}"] = ['value' => $mergedValues];
         } else {
             // No info object exists — create one and point the trailer at it.
             $maxId = 0;
@@ -702,12 +801,19 @@ class PendingCollate implements Responsable
 
         file_put_contents($jsonFile, $json);
 
-        $result = Process::run([
+        $updateCommand = [
             $this->collate->binaryPath(),
-            $file,
-            '--update-from-json='.$jsonFile,
-            '--replace-input',
-        ]);
+        ];
+
+        if ($this->encryption) {
+            $updateCommand[] = "--password={$this->encryption['owner_password']}";
+        }
+
+        $updateCommand[] = $file;
+        $updateCommand[] = '--update-from-json='.$jsonFile;
+        $updateCommand[] = '--replace-input';
+
+        $result = Process::run($updateCommand);
 
         @unlink($jsonFile);
 
@@ -736,23 +842,24 @@ class PendingCollate implements Responsable
             $command[] = '--decrypt';
         }
 
-        // When merging additions into a source, qpdf requires --empty
-        // as the container; the source is then referenced inside --pages instead.
-        // When there is no source at all, --empty is also the correct base.
-        if ($this->source && empty($this->additions)) {
+        // qpdf takes document-level data (outlines, bookmarks, tags) from the
+        // primary input file. When a source is set, always use it as the
+        // primary input so that document metadata is preserved. Inside --pages,
+        // use "." to refer back to this primary input file.
+        // When there is no source at all, --empty is the correct base.
+        if ($this->source) {
             $command[] = $this->source;
         } else {
             $command[] = '--empty';
         }
 
         // The --pages block controls which pages end up in the output.
-        // It is always needed when a source is set, and also when only
-        // additions are present (no source document).
+        // "." refers to the primary input file specified above.
         if ($this->source) {
             $pages = $pageOverride ?? $this->pageSelection;
 
             $command[] = '--pages';
-            $command[] = $this->source;
+            $command[] = '.';
             $command[] = $pages ?? '1-z';
 
             foreach ($this->additions as $addition) {
@@ -858,7 +965,15 @@ class PendingCollate implements Responsable
 
         // Use a stream rather than file_get_contents to avoid loading the
         // entire remote file into PHP memory before writing it to disk.
-        file_put_contents($tempPath, $disk->readStream($file));
+        $stream = $disk->readStream($file);
+
+        if ($stream === null) {
+            throw new \Illuminate\Contracts\Filesystem\FileNotFoundException(
+                "Collate: could not read file '{$file}' from disk."
+            );
+        }
+
+        file_put_contents($tempPath, $stream);
 
         $this->tempInputFiles[] = $tempPath;
 
