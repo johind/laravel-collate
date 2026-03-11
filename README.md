@@ -416,8 +416,7 @@ Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed re
 
 ## Contributing
 
-Contributions are welcome! Please open an issue to discuss bugs, feature requests, or pull requests. I do not provide monetary compensations.
-
+I appreciate your help in keeping Collate stable! I'm primarily looking for contributions that focus on fixing bugs, improving error handling, or performance. If you have an idea for a new feature, please open an issue to discuss it with me first, as I want to keep the package's scope focused. Please note that I do not provide monetary compensation for contributions.
 ## Security
 
 If you discover a security vulnerability, please send an email rather than opening a GitHub issue.
