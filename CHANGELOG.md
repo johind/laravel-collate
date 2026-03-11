@@ -2,6 +2,21 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.1.0 - 2026-03-11
+
+This release addresses critical boundary bugs in page selection, improves compatibility with modern versions of `qpdf`, and enhances the extensibility of the builder.
+
+### Fixed
+- Resolved a boundary bug in `removePages()` that caused `ProcessFailedException` when attempting to remove the final page of a document.
+- Fixed a process failure when using 40-bit or 128-bit encryption with `qpdf` v11+ by automatically appending the `--allow-weak-crypto` flag.
+
+### Added
+- Added the `Macroable` trait to the `PendingCollate` class, allowing users to extend the builder with custom macros as promised in the documentation.
+
+### Changed
+- Improved error handling: `removePages()` and `onlyPages()` now throw a descriptive `BadMethodCallException` if called without a source file (e.g., in a `merge()` chain).
+- Updated internal validation for `removePages()` to be more robust against out-of-bounds selections.
+
 ## 1.0.0 - 2026-03-11
 
 Initial release of Collate, providing a fluent API for PDF manipulation in Laravel powered by `qpdf`.
