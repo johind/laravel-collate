@@ -89,7 +89,7 @@ For more control, pass a closure to select specific pages:
 use Johind\Collate\PendingCollate;
 
 Collate::merge(function (PendingCollate $pdf) {
-    $pdf->addPage('documents/cover.pdf');
+    $pdf->addPage('documents/cover.pdf', 1);
     $pdf->addPages('documents/appendix.pdf', range: '1-3');
 })->save('documents/book.pdf');
 ```
@@ -99,14 +99,14 @@ Collate::merge(function (PendingCollate $pdf) {
 Append entire files or specific pages to an existing document:
 
 ```php
-Collate::open('contract.pdf')
-    ->addPage('signature-page.pdf')
-    ->save('signed-contract.pdf');
-
-// Add a specific page from another file
 Collate::open('report.pdf')
     ->addPage('appendix.pdf', pageNumber: 3)
     ->save('report-with-appendix.pdf');
+
+// Add an entire file (all pages)
+Collate::open('contract.pdf')
+    ->addPages('signature-page.pdf')
+    ->save('signed-contract.pdf');
 
 // Add a range of pages
 Collate::open('report.pdf')
