@@ -2,6 +2,17 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.2.1 - 2026-03-11
+
+This release adds support for the 'z' notation (referring to the final page of a document) in `removePages()` and `addPages()`.
+
+### Added
+- Added support for 'z' in `removePages()` (e.g., `->removePages('z')` to remove the last page).
+- Verified support for 'z' in `addPages()` ranges.
+
+### Documentation
+- Updated `README.md` to clarify supported page ranges and remove unimplemented `r` (reverse) notation.
+
 ## 1.2.0 - 2026-03-11
 
 This release improves API consistency by strictly enforcing single-page semantics for the `addPage` method.

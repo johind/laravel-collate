@@ -181,8 +181,6 @@ Anywhere a page range string is accepted (`onlyPages()`, `addPages()`, `removePa
 | `1,3,5` | Pages 1, 3, and 5 |
 | `1-3,7-9` | Pages 1–3 and 7–9 |
 | `z` | Last page |
-| `r1` | Last page (reverse notation) |
-| `r3-r1` | Last three pages |
 | `1-z` | All pages |
 
 Note: `onlyPages()` and `removePages()` are mutually exclusive — calling both on the same instance will throw a `BadMethodCallException`.

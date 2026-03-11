@@ -203,15 +203,17 @@ class PendingCollate implements Responsable
         // so we can process the gaps sequentially from start to finish.
         $items = is_array($pages) ? $pages : explode(',', $pages);
 
+        $totalPageCount = $this->getFilePageCount($this->source);
+
         $pagesToRemove = [];
 
-        // Expand any hyphenated ranges (e.g. '5-10') into individual page
-        // numbers before processing. intval alone would silently truncate
+        // Expand any hyphenated ranges (e.g. '5-10', '5-z') into individual
+        // page numbers before processing. intval alone would silently truncate
         // '5-10' to 5, dropping pages 6 through 10.
         foreach ($items as $item) {
             $item = trim((string) $item);
 
-            if ($item === '' || ! preg_match('/^\d+(-\d+)?$/', $item)) {
+            if ($item === '' || ! preg_match('/^(\d+|z)(-(\d+|z))?$/', $item)) {
                 throw new \InvalidArgumentException(
                     "Collate: '{$item}' is not a valid page number or range."
                 );
@@ -219,9 +221,11 @@ class PendingCollate implements Responsable
 
             if (str_contains($item, '-')) {
                 [$start, $end] = explode('-', $item, 2);
-                array_push($pagesToRemove, ...range((int) $start, (int) $end));
+                $start = $start === 'z' ? $totalPageCount : (int) $start;
+                $end = $end === 'z' ? $totalPageCount : (int) $end;
+                array_push($pagesToRemove, ...range($start, $end));
             } else {
-                $pagesToRemove[] = (int) $item;
+                $pagesToRemove[] = $item === 'z' ? $totalPageCount : (int) $item;
             }
         }
 
@@ -235,8 +239,6 @@ class PendingCollate implements Responsable
 
         sort($pagesToRemove);
         $pagesToRemove = array_unique($pagesToRemove);
-
-        $totalPageCount = $this->getFilePageCount($this->source);
 
         $keepRanges = [];
         $start = 1;

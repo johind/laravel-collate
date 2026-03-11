@@ -123,6 +123,24 @@ describe('removePages()', function () {
 
         expect(getProperty($pending, 'pageSelection'))->toBe('1-2,4-z');
     });
+
+    it('handles "z" as the last page', function () {
+        $pending = makeCollate()->open('doc.pdf')->removePages('z');
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-11');
+    });
+
+    it('handles "z" in ranges (e.g., "10-z")', function () {
+        $pending = makeCollate()->open('doc.pdf')->removePages('10-z');
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-9');
+    });
+
+    it('handles "z" in an array', function () {
+        $pending = makeCollate()->open('doc.pdf')->removePages(['1', 'z']);
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('2-11');
+    });
 });
 
 it('removePage() delegates correctly to removePages()', function () {
@@ -142,6 +160,12 @@ describe('addPage()', function () {
 });
 
 describe('addPages()', function () {
+    it('supports "z" in the range parameter', function () {
+        $pending = makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1-z');
+
+        expect(getProperty($pending, 'additions')[0]['pages'])->toBe('1-z');
+    });
+
     it('throws when an array of files is combined with a range', function () {
         expect(fn () => makeCollate()->open('doc.pdf')
             ->addPages(['doc.pdf', 'doc.pdf'], range: '1-3')
