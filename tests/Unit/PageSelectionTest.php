@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
     Storage::fake('local');
-    Storage::put('doc.pdf', file_get_contents(fixturePath('single-page.pdf')));
+    Storage::put('doc.pdf', file_get_contents(fixturePath('twelve-page.pdf')));
 });
 
 describe('onlyPages()', function () {
@@ -33,9 +33,19 @@ describe('onlyPages()', function () {
             ->onlyPages([2])
         )->toThrow(BadMethodCallException::class);
     });
+
+    it('throws if called on null source', function () {
+        expect(fn () => makeCollate()->merge('doc.pdf')->onlyPages([1]))
+            ->toThrow(BadMethodCallException::class, 'Collate: cannot call onlyPages() when no source file is set.');
+    });
 });
 
 describe('removePages()', function () {
+    it('throws if called on null source', function () {
+        expect(fn () => makeCollate()->merge('doc.pdf')->removePages([1]))
+            ->toThrow(BadMethodCallException::class, 'Collate: cannot call removePages() when no source file is set.');
+    });
+
     it('produces correct keep ranges from an integer array', function () {
         $pending = makeCollate()->open('doc.pdf')->removePages([3]);
 

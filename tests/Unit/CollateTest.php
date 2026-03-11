@@ -102,3 +102,13 @@ describe('merge()', function () {
         expect(getProperty($pending, 'source'))->toBeNull();
     });
 });
+
+it('can use macros on PendingCollate', function () {
+    PendingCollate::macro('testMacro', function () {
+        return 'macro-called';
+    });
+
+    $pending = makeCollate()->open('doc.pdf');
+
+    expect($pending->testMacro())->toBe('macro-called');
+});

@@ -11,13 +11,14 @@ use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use Johind\Collate\Exceptions\ProcessFailedException;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PendingCollate implements Responsable
 {
-    use Conditionable;
+    use Conditionable, Macroable;
 
     /**
      * Map of valid permission names to their correct qpdf deny flag.
@@ -192,6 +193,12 @@ class PendingCollate implements Responsable
      */
     public function removePages(string|array $pages): static
     {
+        if ($this->source === null) {
+            throw new \BadMethodCallException(
+                'Collate: cannot call removePages() when no source file is set. Use open() or inspect() first.'
+            );
+        }
+
         if ($this->pageSelection !== null) {
             throw new \BadMethodCallException(
                 'Collate: cannot call removePages() after onlyPages() or removePages() has already been called.'
@@ -235,6 +242,8 @@ class PendingCollate implements Responsable
         sort($pagesToRemove);
         $pagesToRemove = array_unique($pagesToRemove);
 
+        $totalPageCount = $this->getFilePageCount($this->source);
+
         $keepRanges = [];
         $start = 1;
 
@@ -242,6 +251,10 @@ class PendingCollate implements Responsable
         // We must calculate the positive blocks of pages we want to KEEP.
         // For example: To remove page 3, we must tell qpdf to keep "1-2" and "4-z".
         foreach ($pagesToRemove as $skipPage) {
+            if ($skipPage > $totalPageCount) {
+                continue;
+            }
+
             if ($skipPage > $start) {
                 $endOfKeepRange = $skipPage - 1;
 
@@ -254,9 +267,11 @@ class PendingCollate implements Responsable
             $start = $skipPage + 1;
         }
 
-        // Always append the remainder of the document.
+        // Only append the remainder of the document if there are pages left.
         // 'z' is qpdf's variable for the final page of the document.
-        $keepRanges[] = "{$start}-z";
+        if ($start <= $totalPageCount) {
+            $keepRanges[] = "{$start}-z";
+        }
 
         $this->pageSelection = implode(',', $keepRanges);
 
@@ -270,6 +285,12 @@ class PendingCollate implements Responsable
      */
     public function onlyPages(string|array $pages): static
     {
+        if ($this->source === null) {
+            throw new \BadMethodCallException(
+                'Collate: cannot call onlyPages() when no source file is set. Use open() or inspect() first.'
+            );
+        }
+
         if ($this->pageSelection !== null) {
             throw new \BadMethodCallException(
                 'Collate: cannot call onlyPages() after removePages() or onlyPages() has already been called.'
@@ -287,6 +308,10 @@ class PendingCollate implements Responsable
 
     /**
      * Encrypt the document and restrict permissions.
+     *
+     * Note: 40-bit and 128-bit encryption are considered weak and are not
+     * recommended for sensitive data. Modern versions of qpdf require an
+     * internal flag to allow them, which Collate handles automatically.
      */
     public function encrypt(
         string $userPassword,
@@ -964,6 +989,10 @@ class PendingCollate implements Responsable
 
         // Encryption
         if ($this->encryption) {
+            if ($this->encryption['bit_length'] < 256) {
+                $command[] = '--allow-weak-crypto';
+            }
+
             $command[] = '--encrypt';
             $command[] = $this->encryption['user_password'];
             $command[] = $this->encryption['owner_password'];

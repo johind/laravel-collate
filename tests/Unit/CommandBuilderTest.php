@@ -135,6 +135,27 @@ describe('encryption', function () {
             ->and($command)->toContain('--extract=n');
     });
 
+    it('appends --allow-weak-crypto for 40-bit encryption', function () {
+        $pending = makeCollate()->open('source.pdf')->encrypt('user', 'owner', 40);
+        $command = buildCommand($pending);
+
+        expect($command)->toContain('--allow-weak-crypto');
+    });
+
+    it('appends --allow-weak-crypto for 128-bit encryption', function () {
+        $pending = makeCollate()->open('source.pdf')->encrypt('user', 'owner', 128);
+        $command = buildCommand($pending);
+
+        expect($command)->toContain('--allow-weak-crypto');
+    });
+
+    it('does not append --allow-weak-crypto for 256-bit encryption', function () {
+        $pending = makeCollate()->open('source.pdf')->encrypt('user', 'owner', 256);
+        $command = buildCommand($pending);
+
+        expect($command)->not->toContain('--allow-weak-crypto');
+    });
+
     it('restricting print does not silently add --modify=none', function () {
         $pending = makeCollate()->open('source.pdf')
             ->encrypt('password')
