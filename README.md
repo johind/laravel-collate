@@ -6,7 +6,7 @@ Collate is a Laravel package that provides an intuitive API for manipulating PDF
 
 - PHP 8.4+
 - Laravel 11 or 12
-- [qpdf](https://qpdf.readthedocs.io/) installed on your system
+- [qpdf](https://qpdf.readthedocs.io/) v11.0.0 or higher installed on your system
 
 ## Installation
 
