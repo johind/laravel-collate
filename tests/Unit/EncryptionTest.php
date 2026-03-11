@@ -85,6 +85,15 @@ describe('restrict()', function () {
 
         expect(getProperty($pending, 'restrictions'))->toBe(['print', 'modify']);
     });
+
+    it('deduplicates repeated permissions', function () {
+        $pending = makeCollate()->open('doc.pdf')
+            ->encrypt('password')
+            ->restrict('print')
+            ->restrict('print');
+
+        expect(getProperty($pending, 'restrictions'))->toBe(['print']);
+    });
 });
 
 describe('decrypt()', function () {

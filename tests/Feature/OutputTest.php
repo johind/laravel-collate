@@ -13,6 +13,7 @@ beforeEach(function () {
     Storage::fake('s3');
     Storage::put('input.pdf', file_get_contents(fixturePath('single-page.pdf')));
     Storage::put('multi.pdf', file_get_contents(fixturePath('multi-page.pdf')));
+    Storage::put('twelve.pdf', file_get_contents(fixturePath('twelve-page.pdf')));
     Storage::put('encrypted.pdf', file_get_contents(fixturePath('encrypted.pdf')));
 });
 
@@ -134,6 +135,13 @@ describe('split()', function () {
 
         expect($paths)->toHaveCount(1);
     });
+
+    it('correctly splits a PDF with more than 10 pages', function () {
+        $paths = makeCollate()->open('twelve.pdf')->split('pages/page-{page}.pdf');
+
+        expect($paths)->toHaveCount(12);
+        $paths->each(fn ($path) => expect(Storage::exists($path))->toBeTrue());
+    });
 });
 
 describe('decrypt()', function () {
@@ -141,5 +149,30 @@ describe('decrypt()', function () {
         makeCollate()->open('encrypted.pdf')->decrypt('test')->save('decrypted.pdf');
 
         expect(Storage::exists('decrypted.pdf'))->toBeTrue();
+    });
+
+    it('processes an encrypted source with additions', function () {
+        makeCollate()->open('encrypted.pdf')
+            ->decrypt('test')
+            ->addPage('input.pdf')
+            ->save('merged.pdf');
+
+        expect(Storage::exists('merged.pdf'))->toBeTrue();
+    });
+});
+
+describe('encrypt() + withMetadata()', function () {
+    it('round-trips metadata on an encrypted document', function () {
+        makeCollate()->open('input.pdf')
+            ->encrypt('user', 'owner')
+            ->withMetadata(title: 'Encrypted Doc', author: 'Test')
+            ->save('enc-meta.pdf');
+
+        $meta = makeCollate()->open('enc-meta.pdf')
+            ->decrypt('owner')
+            ->metadata();
+
+        expect($meta->title)->toBe('Encrypted Doc')
+            ->and($meta->author)->toBe('Test');
     });
 });

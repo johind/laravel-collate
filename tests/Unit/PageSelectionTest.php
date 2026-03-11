@@ -92,6 +92,27 @@ describe('removePages()', function () {
             ->removePages([2])
         )->toThrow(BadMethodCallException::class);
     });
+
+    it('throws for page number zero', function () {
+        expect(fn () => makeCollate()->open('doc.pdf')->removePages([0]))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for negative page numbers', function () {
+        expect(fn () => makeCollate()->open('doc.pdf')->removePages([-1]))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for non-numeric string values', function () {
+        expect(fn () => makeCollate()->open('doc.pdf')->removePages(['foo']))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('handles duplicate page numbers without producing duplicate keep ranges', function () {
+        $pending = makeCollate()->open('doc.pdf')->removePages([3, 3]);
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-2,4-z');
+    });
 });
 
 it('removePage() delegates correctly to removePages()', function () {

@@ -63,6 +63,30 @@ describe('withMetadata()', function () {
             ->and(getProperty($pending, 'metadata'))->toHaveKey('Title');
     });
 
+    it('maps creator to the Creator qpdf key', function () {
+        $pending = makeCollate()->open('doc.pdf')->withMetadata(creator: 'My App');
+
+        expect(getProperty($pending, 'metadata'))->toHaveKey('Creator', 'My App');
+    });
+
+    it('maps producer to the Producer qpdf key', function () {
+        $pending = makeCollate()->open('doc.pdf')->withMetadata(producer: 'Collate');
+
+        expect(getProperty($pending, 'metadata'))->toHaveKey('Producer', 'Collate');
+    });
+
+    it('maps creationDate to the CreationDate qpdf key', function () {
+        $pending = makeCollate()->open('doc.pdf')->withMetadata(creationDate: '2025-01-01');
+
+        expect(getProperty($pending, 'metadata'))->toHaveKey('CreationDate', '2025-01-01');
+    });
+
+    it('maps modDate to the ModDate qpdf key', function () {
+        $pending = makeCollate()->open('doc.pdf')->withMetadata(modDate: '2025-06-15');
+
+        expect(getProperty($pending, 'metadata'))->toHaveKey('ModDate', '2025-06-15');
+    });
+
     it('setting no arguments leaves metadata empty', function () {
         $pending = makeCollate()->open('doc.pdf')->withMetadata();
 

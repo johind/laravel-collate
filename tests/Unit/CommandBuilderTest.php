@@ -19,11 +19,13 @@ describe('input file', function () {
             ->and($command)->not->toContain('--empty');
     });
 
-    it('uses --empty when the source has additions', function () {
+    it('uses the source as the primary input even when there are additions', function () {
         $pending = makeCollate()->open('source.pdf')->addPage('addition.pdf');
         $command = buildCommand($pending);
+        $sourcePath = Storage::path('source.pdf');
 
-        expect($command)->toContain('--empty');
+        expect($command)->toContain($sourcePath)
+            ->and($command)->not->toContain('--empty');
     });
 
     it('uses --empty when there is no source at all', function () {
@@ -35,14 +37,13 @@ describe('input file', function () {
 });
 
 describe('--pages block', function () {
-    it('includes source in --pages block with the default range', function () {
+    it('uses "." to refer to the primary input inside the --pages block', function () {
         $pending = makeCollate()->open('source.pdf');
         $command = buildCommand($pending);
-        $sourcePath = Storage::path('source.pdf');
 
         $pagesIndex = array_search('--pages', $command);
 
-        expect($command[$pagesIndex + 1])->toBe($sourcePath)
+        expect($command[$pagesIndex + 1])->toBe('.')
             ->and($command[$pagesIndex + 2])->toBe('1-z');
     });
 
