@@ -1,10 +1,14 @@
 {
     "name": "johind/collate",
-    "description": "Manipulate PDFs within Laravel applications using a simple and intuitive API",
+    "description": "A Laravel package for PDF manipulation. Merge, split, and process documents for AI ingestion and general tasks.",
     "keywords": [
-        "johind",
         "laravel",
-        "collate"
+        "pdf",
+        "qpdf",
+        "pdf-manipulation",
+        "merge-pdf",
+        "split-pdf",
+        "ai-preparation"
     ],
     "homepage": "https://github.com/johind/collate",
     "license": "MIT",
