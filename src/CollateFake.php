@@ -38,6 +38,17 @@ class CollateFake extends Collate
     }
 
     /**
+     * Open a PDF for reading only (metadata, page count, etc.).
+     */
+    public function inspect(string|UploadedFile $file): PendingCollateFake
+    {
+        $pending = new PendingCollateFake($this, $file);
+        $this->recorded->push($pending);
+
+        return $pending;
+    }
+
+    /**
      * Merge multiple PDFs into a single document.
      */
     public function merge(\Closure|string|UploadedFile ...$files): PendingCollateFake
