@@ -147,6 +147,8 @@ class PendingCollate implements Responsable
 
     /**
      * Add a range of pages from a file, or multiple files at once.
+     *
+     * @param  string|array<int, string|\Illuminate\Http\UploadedFile>|\Illuminate\Http\UploadedFile  $files
      */
     public function addPages(
         string|array|UploadedFile $files,
@@ -185,6 +187,8 @@ class PendingCollate implements Responsable
 
     /**
      * Remove multiple pages or a range (e.g., [1, 3], '5-10', or '1,3,5-8').
+     *
+     * @param  string|array<int, int|string>  $pages
      */
     public function removePages(string|array $pages): static
     {
@@ -261,6 +265,8 @@ class PendingCollate implements Responsable
 
     /**
      * Keep only the specified pages.
+     *
+     * @param  string|array<int, int|string>  $pages
      */
     public function onlyPages(string|array $pages): static
     {
