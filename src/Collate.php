@@ -21,7 +21,7 @@ class Collate
     /**
      * Set the storage disk for the next operation.
      */
-    public function disk(string $disk): static
+    public function fromDisk(string $disk): static
     {
         $instance = clone $this;
         $instance->disk = $disk;
@@ -52,13 +52,15 @@ class Collate
     /**
      * Merge multiple PDFs into a single document.
      */
-    public function merge(Closure|string|UploadedFile ...$files): PendingCollate
+    public function merge(Closure|string|UploadedFile|array ...$files): PendingCollate
     {
         $pending = new PendingCollate($this);
 
         foreach ($files as $file) {
             if ($file instanceof Closure) {
                 $file($pending);
+            } elseif (is_array($file)) {
+                $pending->addPages($file);
             } else {
                 $pending->addPages($file);
             }

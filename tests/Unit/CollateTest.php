@@ -29,23 +29,23 @@ it('stores the temp directory', function (): void {
     expect($collate->tempDirectory())->toBe('/tmp/collate');
 });
 
-describe('disk()', function (): void {
+describe('fromDisk()', function (): void {
     it('returns a new instance', function (): void {
         $original = makeCollate();
-        $cloned = $original->disk('s3');
+        $cloned = $original->fromDisk('s3');
 
         expect($cloned)->not->toBe($original);
     });
 
     it('does not mutate the original instance', function (): void {
         $original = makeCollate('local');
-        $original->disk('s3');
+        $original->fromDisk('s3');
 
         expect($original->diskName())->toBe('local');
     });
 
     it('sets the disk name on the cloned instance', function (): void {
-        $cloned = makeCollate('local')->disk('s3');
+        $cloned = makeCollate('local')->fromDisk('s3');
 
         expect($cloned->diskName())->toBe('s3');
     });
@@ -88,6 +88,20 @@ describe('merge()', function (): void {
         $pending = makeCollate()->merge('doc.pdf', 'b.pdf');
 
         expect(getProperty($pending, 'additions'))->toHaveCount(2);
+    });
+
+    it('can accept a single array of files', function (): void {
+        $pending = makeCollate()->merge(['doc.pdf', 'b.pdf']);
+
+        expect(getProperty($pending, 'additions'))->toHaveCount(2);
+    });
+
+    it('handles mixed array and string arguments correctly', function (): void {
+        $pending = makeCollate()->merge(['doc.pdf'], 'b.pdf');
+
+        expect(getProperty($pending, 'additions'))->toHaveCount(2)
+            ->and(getProperty($pending, 'additions')[0]['file'])->toBe(Storage::path('doc.pdf'))
+            ->and(getProperty($pending, 'additions')[1]['file'])->toBe(Storage::path('b.pdf'));
     });
 
     it('closure receives and can mutate the pending instance', function (): void {

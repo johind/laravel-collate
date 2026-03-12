@@ -27,7 +27,9 @@ describe('save()', function (): void {
     });
 
     it('with an explicit disk writes to that disk instead', function (): void {
-        makeCollate()->open('input.pdf')->save('output.pdf', disk: 's3');
+        Storage::fake('s3');
+
+        makeCollate()->open('input.pdf')->toDisk('s3')->save('output.pdf');
 
         expect(Storage::disk('s3')->exists('output.pdf'))->toBeTrue()
             ->and(Storage::disk('local')->exists('output.pdf'))->toBeFalse();
@@ -42,6 +44,49 @@ describe('save()', function (): void {
         $afterCount = is_dir($tempDir) ? count(glob($tempDir.'/*.pdf')) : 0;
 
         expect($afterCount)->toBe($beforeCount);
+    });
+});
+
+describe('memoization', function (): void {
+    it('reuses the processed file across multiple output calls', function (): void {
+        $pending = makeCollate()->open('input.pdf');
+
+        $content1 = $pending->content();
+        $processedPath1 = getProperty($pending, 'processedPath');
+
+        $content2 = $pending->content();
+        $processedPath2 = getProperty($pending, 'processedPath');
+
+        expect($processedPath1)->not->toBeNull()
+            ->and($processedPath2)->toBe($processedPath1)
+            ->and($content1)->toBe($content2);
+    });
+
+    it('clears the memoized result when a mutation occurs', function (): void {
+        Storage::put('other.pdf', file_get_contents(fixturePath('single-page.pdf')));
+
+        $pending = makeCollate()->open('input.pdf');
+        $pending->content();
+
+        $firstProcessedPath = getProperty($pending, 'processedPath');
+        expect($firstProcessedPath)->not->toBeNull();
+
+        $pending->addPages('other.pdf');
+
+        expect(getProperty($pending, 'processedPath'))->toBeNull()
+            ->and(file_exists($firstProcessedPath))->toBeFalse();
+    });
+
+    it('cleans up the memoized file on destruction', function (): void {
+        $pending = makeCollate()->open('input.pdf');
+        $pending->content();
+
+        $processedPath = getProperty($pending, 'processedPath');
+        expect(file_exists($processedPath))->toBeTrue();
+
+        unset($pending);
+
+        expect(file_exists($processedPath))->toBeFalse();
     });
 });
 
@@ -143,6 +188,16 @@ describe('split()', function (): void {
 
         expect($paths)->toHaveCount(12);
         $paths->each(fn ($path) => expect(Storage::exists($path))->toBeTrue());
+    });
+
+    it('respects toDisk() when writing split pages', function (): void {
+        $paths = makeCollate()->open('multi.pdf')
+            ->toDisk('s3')
+            ->split('pages/page-{page}.pdf');
+
+        expect($paths)->not->toBeEmpty();
+        $paths->each(fn ($path) => expect(Storage::disk('s3')->exists($path))->toBeTrue());
+        $paths->each(fn ($path) => expect(Storage::disk('local')->exists($path))->toBeFalse());
     });
 
     it('successfully splits an encrypted document', function (): void {

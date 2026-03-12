@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Storage;
+use Johind\Collate\PdfMetadata;
 
 beforeEach(function (): void {
     Storage::fake('local');
@@ -11,7 +12,7 @@ beforeEach(function (): void {
 
 describe('metadata()', function (): void {
     it('throws when no source file is set', function (): void {
-        expect(fn (): Johind\Collate\PdfMetadata => new Johind\Collate\PendingCollate(makeCollate())->metadata())
+        expect(fn (): PdfMetadata => new Johind\Collate\PendingCollate(makeCollate())->metadata())
             ->toThrow(BadMethodCallException::class);
     });
 });
@@ -76,6 +77,24 @@ describe('withMetadata()', function (): void {
         $pending = makeCollate()->open('doc.pdf')->withMetadata();
 
         expect(getProperty($pending, 'metadata'))->toBeEmpty();
+    });
+
+    it('can accept a PdfMetadata instance directly', function (): void {
+        $meta = new PdfMetadata(title: 'Existing Title', author: 'Existing Author');
+        $pending = makeCollate()->open('doc.pdf')->withMetadata($meta);
+
+        $metadata = getProperty($pending, 'metadata');
+        expect($metadata['Title'])->toBe('Existing Title')
+            ->and($metadata['Author'])->toBe('Existing Author');
+    });
+
+    it('can override PdfMetadata instance values with subsequent arguments', function (): void {
+        $meta = new PdfMetadata(title: 'Original Title', author: 'Original Author');
+        $pending = makeCollate()->open('doc.pdf')->withMetadata($meta, author: 'New Author');
+
+        $metadata = getProperty($pending, 'metadata');
+        expect($metadata['Title'])->toBe('Original Title')
+            ->and($metadata['Author'])->toBe('New Author');
     });
 
     it('is chainable', function (): void {
