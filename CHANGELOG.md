@@ -2,6 +2,19 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.3.0 - 2026-03-12
+
+This release standardizes the page selection parameter across the builder and improves the documentation to better showcase the package's document engineering capabilities.
+
+### Changed (Breaking API Update)
+- Standardized the parameter name for page selections to `$range` across `rotate()`, `removePages()`, and `onlyPages()`.
+- Updated `rotate()` to use `$range` instead of `$pages` for consistency with `addPages()`.
+- If you are using named arguments (e.g., `->rotate(90, pages: '1-3')`), you must update them to use `range:` (e.g., `->rotate(90, range: '1-3')`).
+
+### Documentation
+- Updated the "Quick Example" in the `README.md` to show a more comprehensive, real-world document preparation workflow (including S3 integration, rotation, underlays, metadata, and security).
+- Standardized all `README.md` examples and code snippets to reflect the new `$range` parameter naming.
+
 ## 1.2.1 - 2026-03-11
 
 This release adds support for the 'z' notation (referring to the final page of a document) in `removePages()` and `addPages()`.
