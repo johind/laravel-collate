@@ -1,6 +1,13 @@
 ---
 name: collate-pdf-manipulation
 description: "Manipulate PDFs with the Collate package: merge, split, extract, rotate, encrypt, watermark, and flatten. Use when working with PDF files in Laravel, including reading metadata, combining documents, or preparing PDFs for AI ingestion."
+license: MIT
+tags:
+  - laravel
+  - php
+  - pdf
+  - documents
+  - qpdf
 ---
 
 # Collate PDF Manipulation
