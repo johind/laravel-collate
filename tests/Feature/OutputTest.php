@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -53,7 +55,7 @@ describe('content()', function () {
     it('output starts with the PDF magic bytes', function () {
         $content = makeCollate()->open('input.pdf')->content();
 
-        expect(substr($content, 0, 4))->toBe('%PDF');
+        expect(mb_substr($content, 0, 4))->toBe('%PDF');
     });
 });
 

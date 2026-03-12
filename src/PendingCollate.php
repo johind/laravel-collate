@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Johind\Collate;
 
+use BadMethodCallException;
 use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Filesystem\FilesystemAdapter;
@@ -12,9 +15,12 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\Macroable;
+use InvalidArgumentException;
 use Johind\Collate\Exceptions\ProcessFailedException;
 use League\Flysystem\Local\LocalFilesystemAdapter;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class PendingCollate implements Responsable
 {
@@ -154,7 +160,7 @@ class PendingCollate implements Responsable
         ?string $range = null,
     ): static {
         if (is_array($files) && $range !== null) {
-            throw new \InvalidArgumentException(
+            throw new InvalidArgumentException(
                 'Cannot use range parameter when adding multiple files. '
                 .'Chain multiple addPages() calls with range instead.'
             );
@@ -188,13 +194,13 @@ class PendingCollate implements Responsable
     public function removePages(string|array $pages): static
     {
         if ($this->source === null) {
-            throw new \BadMethodCallException(
+            throw new BadMethodCallException(
                 'Collate: cannot call removePages() when no source file is set. Use open() or inspect() first.'
             );
         }
 
         if ($this->pageSelection !== null) {
-            throw new \BadMethodCallException(
+            throw new BadMethodCallException(
                 'Collate: cannot call removePages() after onlyPages() or removePages() has already been called.'
             );
         }
@@ -211,10 +217,10 @@ class PendingCollate implements Responsable
         // page numbers before processing. intval alone would silently truncate
         // '5-10' to 5, dropping pages 6 through 10.
         foreach ($items as $item) {
-            $item = trim((string) $item);
+            $item = mb_trim((string) $item);
 
             if ($item === '' || ! preg_match('/^(\d+|z)(-(\d+|z))?$/', $item)) {
-                throw new \InvalidArgumentException(
+                throw new InvalidArgumentException(
                     "Collate: '{$item}' is not a valid page number or range."
                 );
             }
@@ -231,7 +237,7 @@ class PendingCollate implements Responsable
 
         foreach ($pagesToRemove as $page) {
             if ($page < 1) {
-                throw new \InvalidArgumentException(
+                throw new InvalidArgumentException(
                     "Collate: page numbers must be at least 1. Got: {$page}."
                 );
             }
@@ -282,13 +288,13 @@ class PendingCollate implements Responsable
     public function onlyPages(string|array $pages): static
     {
         if ($this->source === null) {
-            throw new \BadMethodCallException(
+            throw new BadMethodCallException(
                 'Collate: cannot call onlyPages() when no source file is set. Use open() or inspect() first.'
             );
         }
 
         if ($this->pageSelection !== null) {
-            throw new \BadMethodCallException(
+            throw new BadMethodCallException(
                 'Collate: cannot call onlyPages() after removePages() or onlyPages() has already been called.'
             );
         }
@@ -315,7 +321,7 @@ class PendingCollate implements Responsable
         int $bitLength = 256,
     ): static {
         if (! in_array($bitLength, [40, 128, 256], true)) {
-            throw new \InvalidArgumentException(
+            throw new InvalidArgumentException(
                 "Encryption bit length must be 40, 128, or 256. Got: {$bitLength}",
             );
         }
@@ -349,7 +355,7 @@ class PendingCollate implements Responsable
     public function restrict(string ...$permissions): static
     {
         if ($this->encryption === null) {
-            throw new \BadMethodCallException(
+            throw new BadMethodCallException(
                 'Collate: cannot restrict permissions without encryption. Call encrypt() first.'
             );
         }
@@ -357,7 +363,7 @@ class PendingCollate implements Responsable
         foreach ($permissions as $permission) {
             if (! array_key_exists($permission, self::RESTRICTIONS)) {
                 $valid = implode(', ', array_keys(self::RESTRICTIONS));
-                throw new \InvalidArgumentException(
+                throw new InvalidArgumentException(
                     "Collate: '{$permission}' is not a valid permission. Valid permissions are: {$valid}."
                 );
             }
@@ -385,7 +391,7 @@ class PendingCollate implements Responsable
     public function rotate(int $degrees, string $pages = '1-z'): static
     {
         if (! in_array($degrees, [0, 90, 180, 270], true)) {
-            throw new \InvalidArgumentException(
+            throw new InvalidArgumentException(
                 "Rotation degrees must be 0, 90, 180, or 270. Got: {$degrees}",
             );
         }
@@ -434,7 +440,7 @@ class PendingCollate implements Responsable
     public function metadata(): PdfMetadata
     {
         if ($this->source === null) {
-            throw new \BadMethodCallException('Collate: cannot read metadata without a source file. Use open() or inspect() first.');
+            throw new BadMethodCallException('Collate: cannot read metadata without a source file. Use open() or inspect() first.');
         }
 
         $command = [
@@ -470,11 +476,11 @@ class PendingCollate implements Responsable
             foreach ($qpdfObjects["obj:{$infoRef}"]['value'] as $field => $meta) {
                 // Strip the leading "/" from the field key to normalise
                 // e.g. "/Title" → "Title" for PdfMetadata::fromArray.
-                $key = ltrim($field, '/');
+                $key = mb_ltrim($field, '/');
 
                 // qpdf JSON v2 encodes strings with a "u:" prefix.
                 if (is_string($meta) && str_starts_with($meta, 'u:')) {
-                    $info[$key] = substr($meta, 2);
+                    $info[$key] = mb_substr($meta, 2);
                 } elseif (is_string($meta)) {
                     $info[$key] = $meta;
                 }
@@ -538,77 +544,6 @@ class PendingCollate implements Responsable
     }
 
     /**
-     * Get the page count of a specific file.
-     */
-    protected function getFilePageCount(string $file): int
-    {
-        $command = [
-            $this->collate->binaryPath(),
-            '--show-npages',
-        ];
-
-        if ($this->decryptPassword !== null) {
-            $command[] = "--password={$this->decryptPassword}";
-        }
-
-        $command[] = $file;
-
-        $result = Process::run($command);
-
-        if (! $result->successful()) {
-            throw new ProcessFailedException(
-                "Collate: failed to count pages for file '{$file}' — {$result->errorOutput()}",
-                $result->exitCode(),
-                $result->errorOutput(),
-            );
-        }
-
-        return (int) trim($result->output());
-    }
-
-    /**
-     * Calculate how many pages a selection string would produce from a file.
-     */
-    protected function calculateSelectedPageCount(int $totalInFile, ?string $selection): int
-    {
-        if ($selection === null || $selection === '1-z') {
-            return $totalInFile;
-        }
-
-        $count = 0;
-        $items = explode(',', $selection);
-
-        foreach ($items as $item) {
-            $item = trim($item);
-
-            if (str_contains($item, '-')) {
-                [$startStr, $endStr] = explode('-', $item, 2);
-                $start = ($startStr === 'z') ? $totalInFile : (int) $startStr;
-                $end = ($endStr === 'z') ? $totalInFile : (int) $endStr;
-
-                if ($startStr === 'z' || $endStr === 'z' || ($start <= $totalInFile)) {
-                    // qpdf supports reverse ranges like z-1, which results
-                    // in $totalInFile pages.
-                    if ($start > $end) {
-                        $count += ($start - $end + 1);
-                    } else {
-                        $actualStart = max(1, $start);
-                        $actualEnd = min($end, $totalInFile);
-                        $count += max(0, $actualEnd - $actualStart + 1);
-                    }
-                }
-            } else {
-                $page = ($item === 'z') ? $totalInFile : (int) $item;
-                if ($page >= 1 && $page <= $totalInFile) {
-                    $count++;
-                }
-            }
-        }
-
-        return $count;
-    }
-
-    /**
      * Save the final PDF to a path on the configured disk.
      *
      * Pass a disk name to save to a different disk than the one configured
@@ -625,7 +560,7 @@ class PendingCollate implements Responsable
             $stream = fopen($tempOutput, 'r');
 
             if ($stream === false) {
-                throw new \RuntimeException("Collate: failed to open temp file for reading: {$tempOutput}");
+                throw new RuntimeException("Collate: failed to open temp file for reading: {$tempOutput}");
             }
 
             return $disk->put($path, $stream);
@@ -662,7 +597,7 @@ class PendingCollate implements Responsable
             $content = file_get_contents($tempOutput);
 
             if ($content === false) {
-                throw new \RuntimeException("Collate: failed to read temp file: {$tempOutput}");
+                throw new RuntimeException("Collate: failed to read temp file: {$tempOutput}");
             }
 
             return $content;
@@ -783,6 +718,77 @@ class PendingCollate implements Responsable
     }
 
     /**
+     * Get the page count of a specific file.
+     */
+    protected function getFilePageCount(string $file): int
+    {
+        $command = [
+            $this->collate->binaryPath(),
+            '--show-npages',
+        ];
+
+        if ($this->decryptPassword !== null) {
+            $command[] = "--password={$this->decryptPassword}";
+        }
+
+        $command[] = $file;
+
+        $result = Process::run($command);
+
+        if (! $result->successful()) {
+            throw new ProcessFailedException(
+                "Collate: failed to count pages for file '{$file}' — {$result->errorOutput()}",
+                $result->exitCode(),
+                $result->errorOutput(),
+            );
+        }
+
+        return (int) mb_trim($result->output());
+    }
+
+    /**
+     * Calculate how many pages a selection string would produce from a file.
+     */
+    protected function calculateSelectedPageCount(int $totalInFile, ?string $selection): int
+    {
+        if ($selection === null || $selection === '1-z') {
+            return $totalInFile;
+        }
+
+        $count = 0;
+        $items = explode(',', $selection);
+
+        foreach ($items as $item) {
+            $item = mb_trim($item);
+
+            if (str_contains($item, '-')) {
+                [$startStr, $endStr] = explode('-', $item, 2);
+                $start = ($startStr === 'z') ? $totalInFile : (int) $startStr;
+                $end = ($endStr === 'z') ? $totalInFile : (int) $endStr;
+
+                if ($startStr === 'z' || $endStr === 'z' || ($start <= $totalInFile)) {
+                    // qpdf supports reverse ranges like z-1, which results
+                    // in $totalInFile pages.
+                    if ($start > $end) {
+                        $count += ($start - $end + 1);
+                    } else {
+                        $actualStart = max(1, $start);
+                        $actualEnd = min($end, $totalInFile);
+                        $count += max(0, $actualEnd - $actualStart + 1);
+                    }
+                }
+            } else {
+                $page = ($item === 'z') ? $totalInFile : (int) $item;
+                if ($page >= 1 && $page <= $totalInFile) {
+                    $count++;
+                }
+            }
+        }
+
+        return $count;
+    }
+
+    /**
      * Run the qpdf process and return the path to the temporary output file.
      */
     protected function process(?string $pageOverride = null): string
@@ -805,7 +811,7 @@ class PendingCollate implements Responsable
             if (! empty($this->metadata)) {
                 try {
                     $this->applyMetadata($tempOutput);
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     @unlink($tempOutput);
                     throw $e;
                 }
@@ -1071,7 +1077,7 @@ class PendingCollate implements Responsable
         $stream = $disk->readStream($file);
 
         if ($stream === null) {
-            throw new \Illuminate\Contracts\Filesystem\FileNotFoundException(
+            throw new FileNotFoundException(
                 "Collate: could not read file '{$file}' from disk."
             );
         }

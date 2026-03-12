@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Johind\Collate\CollateFake;
 use Johind\Collate\PendingCollateFake;
 
@@ -31,7 +33,7 @@ it('inspect() followed by pageCount() does not hit real processes', function () 
 });
 
 it('sums page counts from source and additions', function () {
-    $fake = new Johind\Collate\CollateFake;
+    $fake = new CollateFake;
     $pending = $fake->open('a.pdf')->addPages('b.pdf');
 
     // source (3 pages) + addition (3 pages) = 6
@@ -39,7 +41,7 @@ it('sums page counts from source and additions', function () {
 });
 
 it('split() returns correctly sized collection based on total pages', function () {
-    $fake = new Johind\Collate\CollateFake;
+    $fake = new CollateFake;
     $pending = $fake->open('a.pdf')->addPages('b.pdf');
 
     $paths = $pending->split('page-{page}.pdf');
@@ -51,7 +53,7 @@ it('split() returns correctly sized collection based on total pages', function (
 
 describe('assertions', function () {
     it('can assert that a PDF was saved', function () {
-        $fake = new Johind\Collate\CollateFake;
+        $fake = new CollateFake;
         $fake->open('doc.pdf')->save('output.pdf');
 
         $fake->assertSaved('output.pdf');
@@ -59,7 +61,7 @@ describe('assertions', function () {
     });
 
     it('can assert that a PDF was downloaded', function () {
-        $fake = new Johind\Collate\CollateFake;
+        $fake = new CollateFake;
         $fake->open('doc.pdf')->download('download.pdf');
 
         $fake->assertDownloaded('download.pdf');
@@ -67,7 +69,7 @@ describe('assertions', function () {
     });
 
     it('can assert that a PDF was streamed', function () {
-        $fake = new Johind\Collate\CollateFake;
+        $fake = new CollateFake;
         $fake->open('doc.pdf')->stream('stream.pdf');
 
         $fake->assertStreamed('stream.pdf');
@@ -75,7 +77,7 @@ describe('assertions', function () {
     });
 
     it('can assert that nothing was saved, downloaded, or streamed', function () {
-        $fake = new Johind\Collate\CollateFake;
+        $fake = new CollateFake;
 
         $fake->assertNothingSaved();
         $fake->assertNothingDownloaded();
@@ -83,7 +85,7 @@ describe('assertions', function () {
     });
 
     it('can assert that a PDF was split', function () {
-        $fake = new Johind\Collate\CollateFake;
+        $fake = new CollateFake;
         $fake->open('doc.pdf')->split('page-{page}.pdf');
 
         $fake->assertSplit();

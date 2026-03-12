@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Johind\Collate\Collate;
 use Johind\Collate\PendingCollate;
 use Johind\Collate\Tests\TestCase;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Johind\Collate\Commands;
 
 use Illuminate\Console\Command;
@@ -24,7 +26,7 @@ class InstallCommand extends Command
         $result = Process::run([$binaryPath, '--version']);
 
         if ($result->successful()) {
-            $this->components->info('qpdf is installed: '.trim($result->output()));
+            $this->components->info('qpdf is installed: '.mb_trim($result->output()));
         } else {
             $this->components->error("qpdf was not found at [{$binaryPath}]. Please install qpdf and update your config.");
 

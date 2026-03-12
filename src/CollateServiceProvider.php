@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Johind\Collate;
 
 use Johind\Collate\Commands\InstallCommand;

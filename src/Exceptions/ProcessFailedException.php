@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Johind\Collate\Exceptions;
 
 class ProcessFailedException extends CollateException

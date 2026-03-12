@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Johind\Collate;
 
 use Closure;
@@ -12,7 +14,7 @@ class CollateFake extends Collate
     /**
      * All recorded operations.
      *
-     * @var \Illuminate\Support\Collection<int, PendingCollateFake>
+     * @var Collection<int, PendingCollateFake>
      */
     protected Collection $recorded;
 
@@ -211,7 +213,7 @@ class CollateFake extends Collate
     /**
      * Get all recorded operations.
      *
-     * @return \Illuminate\Support\Collection<int, PendingCollateFake>
+     * @return Collection<int, PendingCollateFake>
      */
     public function recorded(): Collection
     {
