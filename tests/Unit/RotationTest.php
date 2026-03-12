@@ -50,15 +50,15 @@ it('defaults to all pages when no range is given', function (): void {
 });
 
 it('stores an explicit page range', function (): void {
-    $pending = makeCollate()->open('doc.pdf')->rotate(90, pages: '2-4');
+    $pending = makeCollate()->open('doc.pdf')->rotate(90, range: '2-4');
 
     expect(getProperty($pending, 'rotations')[0]['pages'])->toBe('2-4');
 });
 
 it('accumulates multiple rotate() calls independently', function (): void {
     $pending = makeCollate()->open('doc.pdf')
-        ->rotate(90, pages: '1-3')
-        ->rotate(180, pages: '5');
+        ->rotate(90, range: '1-3')
+        ->rotate(180, range: '5');
 
     $rotations = getProperty($pending, 'rotations');
 

@@ -98,7 +98,7 @@ describe('decrypt', function (): void {
 
 describe('rotation', function (): void {
     it('appends the correct rotation flag', function (): void {
-        $pending = makeCollate()->open('source.pdf')->rotate(90, pages: '1-3');
+        $pending = makeCollate()->open('source.pdf')->rotate(90, range: '1-3');
         $command = buildCommand($pending);
 
         expect($command)->toContain('--rotate=+90:1-3');
@@ -106,8 +106,8 @@ describe('rotation', function (): void {
 
     it('appends multiple rotation flags in order', function (): void {
         $pending = makeCollate()->open('source.pdf')
-            ->rotate(90, pages: '1')
-            ->rotate(180, pages: '2');
+            ->rotate(90, range: '1')
+            ->rotate(180, range: '2');
         $command = buildCommand($pending);
 
         expect($command)->toContain('--rotate=+90:1')

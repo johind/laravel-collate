@@ -53,7 +53,7 @@ use Johind\Collate\Facades\Collate;
 $file = $request->file('document');
 
 Collate::open($file)
-    ->rotate(90, pages: '1')                 // Fix orientation for specific pages
+    ->rotate(90, range: '1')                 // Fix orientation for specific pages
     ->underlay('branding/letterhead.pdf')    // Apply professional backgrounds
     ->addPages('legal/standard-terms.pdf')   // Assemble complex documents on the fly
     ->withMetadata(title: 'Client Report')   // Inject searchable document properties
@@ -224,8 +224,8 @@ Collate::open('scanned.pdf')
 
 // Rotate specific pages only
 Collate::open('scanned.pdf')
-    ->rotate(90, pages: '1-3')
-    ->rotate(180, pages: '5')
+    ->rotate(90, range: '1-3')
+    ->rotate(180, range: '5')
     ->save('fixed.pdf');
 ```
 

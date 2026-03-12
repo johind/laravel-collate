@@ -190,9 +190,9 @@ class PendingCollate implements Responsable
     /**
      * Remove multiple pages or a range (e.g., [1, 3], '5-10', or '1,3,5-8').
      *
-     * @param  string|array<int, int|string>  $pages
+     * @param  string|array<int, int|string>  $range
      */
-    public function removePages(string|array $pages): static
+    public function removePages(string|array $range): static
     {
         if ($this->source === null) {
             throw new BadMethodCallException(
@@ -208,7 +208,7 @@ class PendingCollate implements Responsable
 
         // Normalize the input into a clean, sorted array of integers,
         // so we can process the gaps sequentially from start to finish.
-        $items = is_array($pages) ? $pages : explode(',', $pages);
+        $items = is_array($range) ? $range : explode(',', $range);
 
         $totalPageCount = $this->getFilePageCount($this->source);
 
@@ -284,9 +284,9 @@ class PendingCollate implements Responsable
     /**
      * Keep only the specified pages.
      *
-     * @param  string|array<int, int|string>  $pages
+     * @param  string|array<int, int|string>  $range
      */
-    public function onlyPages(string|array $pages): static
+    public function onlyPages(string|array $range): static
     {
         if ($this->source === null) {
             throw new BadMethodCallException(
@@ -300,11 +300,11 @@ class PendingCollate implements Responsable
             );
         }
 
-        if (is_array($pages)) {
-            $pages = implode(',', $pages);
+        if (is_array($range)) {
+            $range = implode(',', $range);
         }
 
-        $this->pageSelection = $pages;
+        $this->pageSelection = $range;
 
         return $this;
     }
@@ -389,7 +389,7 @@ class PendingCollate implements Responsable
     /**
      * Rotate specific pages.
      */
-    public function rotate(int $degrees, string $pages = '1-z'): static
+    public function rotate(int $degrees, string $range = '1-z'): static
     {
         if (! in_array($degrees, [0, 90, 180, 270], true)) {
             throw new InvalidArgumentException(
@@ -399,7 +399,7 @@ class PendingCollate implements Responsable
 
         $this->rotations[] = [
             'degrees' => $degrees,
-            'pages' => $pages,
+            'pages' => $range,
         ];
 
         return $this;
