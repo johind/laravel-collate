@@ -2,14 +2,40 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.4.0 - 2026-03-12
+
+This release significantly improves the fluent API, adds professional-grade performance optimizations, and standardizes terminology across the package.
+
+### Changed (Breaking API Update)
+- **Disk Symmetry:** Renamed `Collate::disk()` to `Collate::fromDisk()` to better describe the source data flow.
+- **Enforced toDisk():** Removed the optional `$disk` parameter from `PendingCollate::save()`. You must now use the fluent `toDisk()` method to specify a destination disk (e.g., `Collate::open($file)->toDisk('s3')->save('path.pdf')`).
+- **Standardized Terminology:** Renamed the `$pages` parameter to `$range` across `rotate()`, `removePages()`, and `onlyPages()` for consistency with `addPages()`.
+- **Named Arguments:** If you are using named arguments, you must update `pages:` to `range:` in these methods.
+
+### Added
+- **Fluent toDisk():** Added `PendingCollate::toDisk()` to explicitly set the storage disk for output files, providing clear symmetry with `fromDisk()`.
+- **Enhanced Metadata Handling:** `PendingCollate::withMetadata()` now accepts a `PdfMetadata` instance as its first argument. Subsequent named arguments can still be used to override specific fields.
+- **Flexible Merging:** `Collate::merge()` now natively accepts a single array of files, or mixed arrays and strings, while maintaining support for closures.
+
+### Optimized
+- **Execution Memoization:** The underlying `qpdf` process is now memoized. Subsequent calls to `save()`, `content()`, `stream()`, or `download()` on the same instance will reuse the previously generated PDF instead of re-running the full pipeline. Cache is automatically cleared when mutations occur.
+- **Page Count Caching:** File page counts are now cached within the request lifecycle, and the total document page count is memoized to avoid redundant shell commands.
+- **Memory Efficient Ranges:** Refactored `removePages()` to use boundary-based interval merging. This avoids creating massive internal integer arrays for large documents, significantly reducing memory overhead.
+
+### Fixed
+- **Metadata Mapping:** Fixed a bug where `withMetadata()` would fail to correctly map fields when passed a `PdfMetadata` object due to key casing mismatches.
+- **Documentation:** Fixed a critical error in the README where the removed `save()` disk parameter was still documented.
+
+### Documentation
+- Updated the "Quick Example" in the `README.md` to show a more comprehensive, real-world document engineering workflow.
+- Updated all examples to reflect the new `fromDisk()`, `toDisk()`, and `$range` naming conventions.
+
 ## 1.3.0 - 2026-03-12
 
 This release standardizes the page selection parameter across the builder and improves the documentation to better showcase the package's document engineering capabilities.
 
 ### Changed (Breaking API Update)
 - Standardized the parameter name for page selections to `$range` across `rotate()`, `removePages()`, and `onlyPages()`.
-- Updated `rotate()` to use `$range` instead of `$pages` for consistency with `addPages()`.
-- If you are using named arguments (e.g., `->rotate(90, pages: '1-3')`), you must update them to use `range:` (e.g., `->rotate(90, range: '1-3')`).
 
 ### Documentation
 - Updated the "Quick Example" in the `README.md` to show a more comprehensive, real-world document preparation workflow (including S3 integration, rotation, underlays, metadata, and security).

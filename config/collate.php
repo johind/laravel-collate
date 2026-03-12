@@ -40,5 +40,4 @@ return [
     */
 
     'temp_directory' => env('COLLATE_TEMP_DIR', storage_path('app/collate')),
-
 ];

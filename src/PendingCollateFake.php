@@ -79,6 +79,14 @@ class PendingCollateFake extends PendingCollate
     }
 
     /**
+     * Get the storage disk for the output file.
+     */
+    public function outputDisk(): ?string
+    {
+        return $this->outputDisk;
+    }
+
+    /**
      * Whether the document was saved.
      */
     public function wasSaved(): bool
@@ -134,7 +142,7 @@ class PendingCollateFake extends PendingCollate
         return $this->wasSplit;
     }
 
-    public function save(string $path, ?string $disk = null): bool
+    public function save(string $path): bool
     {
         $this->savedTo = $path;
 

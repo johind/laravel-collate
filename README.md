@@ -83,10 +83,10 @@ Collate::open($request->file('document'));
 
 ### Choosing a Disk
 
-Switch disks on the fly using `disk()`:
+Switch disks on the fly using `fromDisk()`:
 
 ```php
-Collate::disk('s3')->open('reports/quarterly.pdf')->save('archive/quarterly.pdf');
+Collate::fromDisk('s3')->open('reports/quarterly.pdf')->toDisk('local')->save('quarterly.pdf');
 ```
 
 ### Merging PDFs
@@ -99,6 +99,9 @@ Collate::merge(
     'documents/chapter-1.pdf',
     'documents/chapter-2.pdf',
 )->save('documents/book.pdf');
+
+// Also accepts a single array of files
+Collate::merge(['doc1.pdf', 'doc2.pdf'])->save('merged.pdf');
 ```
 
 For more control, pass a closure to select specific pages:
@@ -344,6 +347,10 @@ Collate::open('document.pdf')
         author: 'Taylor Otwell',
     )
     ->save('branded-report.pdf');
+
+// Also accepts a PdfMetadata instance directly
+$meta = Collate::inspect('source.pdf')->metadata();
+Collate::open('target.pdf')->withMetadata($meta)->save('output.pdf');
 ```
 
 ### Page Count
@@ -370,14 +377,14 @@ Collate::merge('doc1.pdf', 'doc2.pdf')
 Collate::open('input.pdf')->save('output.pdf');
 ```
 
-You can save to a different disk than the one used to read the source by passing a disk name as the second argument:
+Use `toDisk()` to save to a different disk than the one used to read the source, for example to read from local and write to S3:
 
 ```php
 // Read from local, save to S3
-Collate::open('input.pdf')->save('reports/output.pdf', disk: 's3');
+Collate::open('input.pdf')->toDisk('s3')->save('reports/output.pdf');
 
 // Read from S3, save back to local
-Collate::disk('s3')->open('input.pdf')->save('output.pdf', disk: 'local');
+Collate::fromDisk('s3')->open('input.pdf')->toDisk('local')->save('output.pdf');
 ```
 
 ### Download

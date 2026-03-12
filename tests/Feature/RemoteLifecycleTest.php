@@ -17,7 +17,7 @@ beforeEach(function (): void {
 
 it('does not delete remote temp files until the instance is destroyed', function (): void {
     // We need to use the real Collate class but with the fake disk
-    $pdf = Collate::disk('s3')->open('remote.pdf');
+    $pdf = Collate::fromDisk('s3')->open('remote.pdf');
 
     $tempFile = getProperty($pdf, 'source');
     expect(file_exists($tempFile))->toBeTrue();

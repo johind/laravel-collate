@@ -54,13 +54,15 @@ class CollateFake extends Collate
     /**
      * Merge multiple PDFs into a single document.
      */
-    public function merge(Closure|string|UploadedFile ...$files): PendingCollateFake
+    public function merge(Closure|string|UploadedFile|array ...$files): PendingCollateFake
     {
         $pending = new PendingCollateFake($this);
 
         foreach ($files as $file) {
             if ($file instanceof Closure) {
                 $file($pending);
+            } elseif (is_array($file)) {
+                $pending->addPages($file);
             } else {
                 $pending->addPages($file);
             }
