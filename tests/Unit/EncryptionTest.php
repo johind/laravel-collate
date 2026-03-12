@@ -4,36 +4,36 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Storage;
 
-beforeEach(function () {
+beforeEach(function (): void {
     Storage::fake('local');
     Storage::put('doc.pdf', file_get_contents(fixturePath('single-page.pdf')));
 });
 
-describe('encrypt()', function () {
-    it('throws for an invalid bit length', function () {
-        expect(fn () => makeCollate()->open('doc.pdf')->encrypt('password', bitLength: 512))
+describe('encrypt()', function (): void {
+    it('throws for an invalid bit length', function (): void {
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->encrypt('password', bitLength: 512))
             ->toThrow(InvalidArgumentException::class);
     });
 
-    it('accepts 40-bit encryption', function () {
+    it('accepts 40-bit encryption', function (): void {
         $pending = makeCollate()->open('doc.pdf')->encrypt('password', bitLength: 40);
 
         expect(getProperty($pending, 'encryption')['bit_length'])->toBe(40);
     });
 
-    it('accepts 128-bit encryption', function () {
+    it('accepts 128-bit encryption', function (): void {
         $pending = makeCollate()->open('doc.pdf')->encrypt('password', bitLength: 128);
 
         expect(getProperty($pending, 'encryption')['bit_length'])->toBe(128);
     });
 
-    it('accepts 256-bit encryption', function () {
+    it('accepts 256-bit encryption', function (): void {
         $pending = makeCollate()->open('doc.pdf')->encrypt('password', bitLength: 256);
 
         expect(getProperty($pending, 'encryption')['bit_length'])->toBe(256);
     });
 
-    it('defaults the owner password to the user password', function () {
+    it('defaults the owner password to the user password', function (): void {
         $pending = makeCollate()->open('doc.pdf')->encrypt('secret');
         $encryption = getProperty($pending, 'encryption');
 
@@ -41,7 +41,7 @@ describe('encrypt()', function () {
             ->and($encryption['owner_password'])->toBe('secret');
     });
 
-    it('accepts separate user and owner passwords', function () {
+    it('accepts separate user and owner passwords', function (): void {
         $pending = makeCollate()->open('doc.pdf')->encrypt('user', 'owner');
         $encryption = getProperty($pending, 'encryption');
 
@@ -50,18 +50,18 @@ describe('encrypt()', function () {
     });
 });
 
-describe('restrict()', function () {
-    it('throws without a prior encrypt() call', function () {
-        expect(fn () => makeCollate()->open('doc.pdf')->restrict('print'))
+describe('restrict()', function (): void {
+    it('throws without a prior encrypt() call', function (): void {
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->restrict('print'))
             ->toThrow(BadMethodCallException::class);
     });
 
-    it('throws for an unrecognised permission name', function () {
-        expect(fn () => makeCollate()->open('doc.pdf')->encrypt('password')->restrict('invalid-perm'))
+    it('throws for an unrecognised permission name', function (): void {
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->encrypt('password')->restrict('invalid-perm'))
             ->toThrow(InvalidArgumentException::class, 'invalid-perm');
     });
 
-    it('accepts all eight valid permission names without throwing', function () {
+    it('accepts all eight valid permission names without throwing', function (): void {
         $valid = ['print', 'modify', 'extract', 'annotate', 'assemble', 'print-highres', 'form', 'modify-other'];
         $base = makeCollate()->open('doc.pdf')->encrypt('password');
 
@@ -71,7 +71,7 @@ describe('restrict()', function () {
         }
     });
 
-    it('stores the requested permissions', function () {
+    it('stores the requested permissions', function (): void {
         $pending = makeCollate()->open('doc.pdf')
             ->encrypt('password')
             ->restrict('print', 'extract');
@@ -79,7 +79,7 @@ describe('restrict()', function () {
         expect(getProperty($pending, 'restrictions'))->toBe(['print', 'extract']);
     });
 
-    it('can be called multiple times to accumulate permissions', function () {
+    it('can be called multiple times to accumulate permissions', function (): void {
         $pending = makeCollate()->open('doc.pdf')
             ->encrypt('password')
             ->restrict('print')
@@ -88,7 +88,7 @@ describe('restrict()', function () {
         expect(getProperty($pending, 'restrictions'))->toBe(['print', 'modify']);
     });
 
-    it('deduplicates repeated permissions', function () {
+    it('deduplicates repeated permissions', function (): void {
         $pending = makeCollate()->open('doc.pdf')
             ->encrypt('password')
             ->restrict('print')
@@ -98,8 +98,8 @@ describe('restrict()', function () {
     });
 });
 
-describe('decrypt()', function () {
-    it('stores the decrypt password', function () {
+describe('decrypt()', function (): void {
+    it('stores the decrypt password', function (): void {
         $pending = makeCollate()->open('doc.pdf')->decrypt('secret');
 
         expect(getProperty($pending, 'decryptPassword'))->toBe('secret');

@@ -20,12 +20,10 @@ class CollateServiceProvider extends PackageServiceProvider
 
     public function registeringPackage(): void
     {
-        $this->app->singleton(Collate::class, function ($app) {
-            return new Collate(
-                binaryPath: config('collate.binary_path', 'qpdf'),
-                disk: config('collate.default_disk'),
-                tempDirectory: config('collate.temp_directory', storage_path('app/collate')),
-            );
-        });
+        $this->app->singleton(Collate::class, fn ($app): Collate => new Collate(
+            binaryPath: config('collate.binary_path', 'qpdf'),
+            disk: config('collate.default_disk'),
+            tempDirectory: config('collate.temp_directory', storage_path('app/collate')),
+        ));
     }
 }

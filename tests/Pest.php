@@ -29,7 +29,7 @@ function makeCollate(string $disk = 'local'): Collate
  */
 function getProperty(object $obj, string $property): mixed
 {
-    return (new ReflectionProperty($obj, $property))->getValue($obj);
+    return new ReflectionProperty($obj, $property)->getValue($obj);
 }
 
 /**
@@ -52,5 +52,7 @@ function buildCommand(PendingCollate $pending, string $output = '/tmp/test-outpu
  */
 function qpdfAvailable(): bool
 {
-    return ! empty(shell_exec('which qpdf 2>/dev/null'));
+    $output = shell_exec('command -v qpdf');
+
+    return is_string($output) && mb_trim($output) !== '';
 }

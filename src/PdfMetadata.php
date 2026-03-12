@@ -52,6 +52,6 @@ readonly class PdfMetadata
             'Producer' => $this->producer,
             'CreationDate' => $this->creationDate,
             'ModDate' => $this->modDate,
-        ], fn ($value) => $value !== null);
+        ], fn (?string $value): bool => $value !== null);
     }
 }

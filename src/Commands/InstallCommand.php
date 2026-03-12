@@ -28,7 +28,7 @@ class InstallCommand extends Command
         if ($result->successful()) {
             $this->components->info('qpdf is installed: '.mb_trim($result->output()));
         } else {
-            $this->components->error("qpdf was not found at [{$binaryPath}]. Please install qpdf and update your config.");
+            $this->components->error(sprintf('qpdf was not found at [%s]. Please install qpdf and update your config.', $binaryPath));
 
             return self::FAILURE;
         }

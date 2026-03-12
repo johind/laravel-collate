@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Storage;
 use Johind\Collate\PdfMetadata;
 
-beforeEach(function () {
+beforeEach(function (): void {
     if (! qpdfAvailable()) {
         test()->skip('qpdf binary not available');
     }
@@ -15,27 +15,27 @@ beforeEach(function () {
     Storage::put('multi.pdf', file_get_contents(fixturePath('multi-page.pdf')));
 });
 
-describe('pageCount()', function () {
-    it('returns 1 for the single-page fixture', function () {
+describe('pageCount()', function (): void {
+    it('returns 1 for the single-page fixture', function (): void {
         $count = makeCollate()->inspect('doc.pdf')->pageCount();
 
         expect($count)->toBe(1);
     });
 
-    it('returns more than 1 for the multi-page fixture', function () {
+    it('returns more than 1 for the multi-page fixture', function (): void {
         $count = makeCollate()->inspect('multi.pdf')->pageCount();
 
         expect($count)->toBeGreaterThan(1);
     });
 
-    it('correctly sums up page counts for merged documents', function () {
+    it('correctly sums up page counts for merged documents', function (): void {
         $count = makeCollate()->merge('doc.pdf', 'multi.pdf')->pageCount();
 
         // doc.pdf is 1 page, multi.pdf is 5 pages.
         expect($count)->toBe(6);
     });
 
-    it('respects page selections in pageCount()', function () {
+    it('respects page selections in pageCount()', function (): void {
         $count = makeCollate()->open('multi.pdf')
             ->onlyPages('1')
             ->addPage('multi.pdf', 2)
@@ -44,7 +44,7 @@ describe('pageCount()', function () {
         expect($count)->toBe(2);
     });
 
-    it('handles complex qpdf ranges in pageCount()', function () {
+    it('handles complex qpdf ranges in pageCount()', function (): void {
         // multi.pdf has 5 pages. z-1 reversed = 5 pages.
         $count = makeCollate()->open('multi.pdf')->onlyPages('z-1')->pageCount();
         expect($count)->toBe(5);
@@ -59,14 +59,14 @@ describe('pageCount()', function () {
     });
 });
 
-describe('metadata()', function () {
-    it('returns a PdfMetadata instance', function () {
+describe('metadata()', function (): void {
+    it('returns a PdfMetadata instance', function (): void {
         $meta = makeCollate()->inspect('doc.pdf')->metadata();
 
         expect($meta)->toBeInstanceOf(PdfMetadata::class);
     });
 
-    it('round-trips all metadata fields written by withMetadata()', function () {
+    it('round-trips all metadata fields written by withMetadata()', function (): void {
         makeCollate()->open('doc.pdf')
             ->withMetadata(
                 title: 'Test Title',
@@ -92,7 +92,7 @@ describe('metadata()', function () {
             ->and($meta->modDate)->toBe('D:20250101000000Z');
     });
 
-    it('round-trips metadata on an encrypted document using owner password', function () {
+    it('round-trips metadata on an encrypted document using owner password', function (): void {
         makeCollate()->open('doc.pdf')
             ->encrypt('user', 'owner')
             ->withMetadata(title: 'Encrypted Doc', author: 'Test')

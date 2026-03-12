@@ -24,7 +24,8 @@ use Throwable;
 
 class PendingCollate implements Responsable
 {
-    use Conditionable, Macroable;
+    use Conditionable;
+    use Macroable;
 
     /**
      * Map of valid permission names to their correct qpdf deny flag.
@@ -221,7 +222,7 @@ class PendingCollate implements Responsable
 
             if ($item === '' || ! preg_match('/^(\d+|z)(-(\d+|z))?$/', $item)) {
                 throw new InvalidArgumentException(
-                    "Collate: '{$item}' is not a valid page number or range."
+                    sprintf("Collate: '%s' is not a valid page number or range.", $item)
                 );
             }
 
@@ -238,7 +239,7 @@ class PendingCollate implements Responsable
         foreach ($pagesToRemove as $page) {
             if ($page < 1) {
                 throw new InvalidArgumentException(
-                    "Collate: page numbers must be at least 1. Got: {$page}."
+                    sprintf('Collate: page numbers must be at least 1. Got: %d.', $page)
                 );
             }
         }
@@ -262,7 +263,7 @@ class PendingCollate implements Responsable
 
                 $keepRanges[] = ($start === $endOfKeepRange)
                     ? (string) $start
-                    : "{$start}-{$endOfKeepRange}";
+                    : sprintf('%d-%d', $start, $endOfKeepRange);
             }
 
             // Move our internal pointer to the page immediately after the one we just skipped.
@@ -272,7 +273,7 @@ class PendingCollate implements Responsable
         // Only append the remainder of the document if there are pages left.
         // 'z' is qpdf's variable for the final page of the document.
         if ($start <= $totalPageCount) {
-            $keepRanges[] = "{$start}-z";
+            $keepRanges[] = $start.'-z';
         }
 
         $this->pageSelection = implode(',', $keepRanges);
@@ -322,7 +323,7 @@ class PendingCollate implements Responsable
     ): static {
         if (! in_array($bitLength, [40, 128, 256], true)) {
             throw new InvalidArgumentException(
-                "Encryption bit length must be 40, 128, or 256. Got: {$bitLength}",
+                'Encryption bit length must be 40, 128, or 256. Got: '.$bitLength,
             );
         }
 
@@ -364,7 +365,7 @@ class PendingCollate implements Responsable
             if (! array_key_exists($permission, self::RESTRICTIONS)) {
                 $valid = implode(', ', array_keys(self::RESTRICTIONS));
                 throw new InvalidArgumentException(
-                    "Collate: '{$permission}' is not a valid permission. Valid permissions are: {$valid}."
+                    sprintf("Collate: '%s' is not a valid permission. Valid permissions are: %s.", $permission, $valid)
                 );
             }
         }
@@ -392,7 +393,7 @@ class PendingCollate implements Responsable
     {
         if (! in_array($degrees, [0, 90, 180, 270], true)) {
             throw new InvalidArgumentException(
-                "Rotation degrees must be 0, 90, 180, or 270. Got: {$degrees}",
+                'Rotation degrees must be 0, 90, 180, or 270. Got: '.$degrees,
             );
         }
 
@@ -449,7 +450,7 @@ class PendingCollate implements Responsable
         ];
 
         if ($this->decryptPassword !== null) {
-            $command[] = "--password={$this->decryptPassword}";
+            $command[] = '--password='.$this->decryptPassword;
         }
 
         $command[] = $this->source;
@@ -458,7 +459,7 @@ class PendingCollate implements Responsable
 
         if (! $result->successful()) {
             throw new ProcessFailedException(
-                "Collate: failed to read PDF metadata — {$result->errorOutput()}",
+                'Collate: failed to read PDF metadata — '.$result->errorOutput(),
                 $result->exitCode(),
                 $result->errorOutput(),
             );
@@ -472,8 +473,8 @@ class PendingCollate implements Responsable
         $infoRef = $qpdfObjects['trailer']['value']['/Info'] ?? null;
 
         // The object key is "obj:6 0 R" — we must prepend "obj:" to the ref.
-        if ($infoRef && isset($qpdfObjects["obj:{$infoRef}"]['value'])) {
-            foreach ($qpdfObjects["obj:{$infoRef}"]['value'] as $field => $meta) {
+        if ($infoRef && isset($qpdfObjects['obj:'.$infoRef]['value'])) {
+            foreach ($qpdfObjects['obj:'.$infoRef]['value'] as $field => $meta) {
                 // Strip the leading "/" from the field key to normalise
                 // e.g. "/Title" → "Title" for PdfMetadata::fromArray.
                 $key = mb_ltrim($field, '/');
@@ -560,7 +561,7 @@ class PendingCollate implements Responsable
             $stream = fopen($tempOutput, 'r');
 
             if ($stream === false) {
-                throw new RuntimeException("Collate: failed to open temp file for reading: {$tempOutput}");
+                throw new RuntimeException('Collate: failed to open temp file for reading: '.$tempOutput);
             }
 
             return $disk->put($path, $stream);
@@ -597,7 +598,7 @@ class PendingCollate implements Responsable
             $content = file_get_contents($tempOutput);
 
             if ($content === false) {
-                throw new RuntimeException("Collate: failed to read temp file: {$tempOutput}");
+                throw new RuntimeException('Collate: failed to read temp file: '.$tempOutput);
             }
 
             return $content;
@@ -630,12 +631,12 @@ class PendingCollate implements Responsable
         $command = [$this->collate->binaryPath()];
 
         if ($this->encryption) {
-            $command[] = "--password={$this->encryption['owner_password']}";
+            $command[] = '--password='.$this->encryption['owner_password'];
         }
 
         $command[] = $processedFile;
         $command[] = '--split-pages';
-        $command[] = "{$prefix}-%d.pdf";
+        $command[] = $prefix.'-%d.pdf';
 
         $splitFiles = [];
 
@@ -644,7 +645,7 @@ class PendingCollate implements Responsable
 
             if (! $result->successful()) {
                 throw new ProcessFailedException(
-                    "Collate: qpdf split failed — {$result->errorOutput()}",
+                    'Collate: qpdf split failed — '.$result->errorOutput(),
                     $result->exitCode(),
                     $result->errorOutput(),
                 );
@@ -656,7 +657,7 @@ class PendingCollate implements Responsable
             // qpdf's %d produces zero-padded page numbers (e.g. "01", "02"),
             // so we use glob to discover the actual filenames instead of
             // guessing the format with an incrementing integer counter.
-            $splitFiles = glob("{$prefix}-*.pdf") ?: [];
+            $splitFiles = glob($prefix.'-*.pdf') ?: [];
             natsort($splitFiles);
 
             foreach ($splitFiles as $page => $tempFile) {
@@ -692,7 +693,7 @@ class PendingCollate implements Responsable
         $tempOutput = $this->process();
 
         $response = response()->streamDownload(
-            function () use ($tempOutput) {
+            function () use ($tempOutput): void {
                 // Stream the file to the output buffer in chunks rather than
                 // reading the whole PDF into a PHP string first.
                 try {
@@ -711,7 +712,7 @@ class PendingCollate implements Responsable
         // We override it here to support both inline and attachment dispositions.
         $response->headers->set(
             'Content-Disposition',
-            "{$disposition}; filename=\"{$filename}\""
+            sprintf('%s; filename="%s"', $disposition, $filename)
         );
 
         return $response;
@@ -728,7 +729,7 @@ class PendingCollate implements Responsable
         ];
 
         if ($this->decryptPassword !== null) {
-            $command[] = "--password={$this->decryptPassword}";
+            $command[] = '--password='.$this->decryptPassword;
         }
 
         $command[] = $file;
@@ -737,7 +738,7 @@ class PendingCollate implements Responsable
 
         if (! $result->successful()) {
             throw new ProcessFailedException(
-                "Collate: failed to count pages for file '{$file}' — {$result->errorOutput()}",
+                sprintf("Collate: failed to count pages for file '%s' — %s", $file, $result->errorOutput()),
                 $result->exitCode(),
                 $result->errorOutput(),
             );
@@ -802,13 +803,13 @@ class PendingCollate implements Responsable
             if (! $result->successful()) {
                 @unlink($tempOutput);
                 throw new ProcessFailedException(
-                    "Collate: qpdf failed — {$result->errorOutput()}",
+                    'Collate: qpdf failed — '.$result->errorOutput(),
                     $result->exitCode(),
                     $result->errorOutput(),
                 );
             }
 
-            if (! empty($this->metadata)) {
+            if ($this->metadata !== []) {
                 try {
                     $this->applyMetadata($tempOutput);
                 } catch (Throwable $e) {
@@ -835,7 +836,7 @@ class PendingCollate implements Responsable
         $infoFields = [];
         foreach ($this->metadata as $key => $value) {
             // qpdf JSON v2 encodes PDF strings with a "u:" prefix.
-            $infoFields["/{$key}"] = "u:{$value}";
+            $infoFields['/'.$key] = 'u:'.$value;
         }
 
         $readCommand = [
@@ -846,7 +847,7 @@ class PendingCollate implements Responsable
         // When the output has been encrypted, qpdf needs the owner password
         // to read the file back for the metadata update.
         if ($this->encryption) {
-            $readCommand[] = "--password={$this->encryption['owner_password']}";
+            $readCommand[] = '--password='.$this->encryption['owner_password'];
         }
 
         $readCommand[] = $file;
@@ -855,7 +856,7 @@ class PendingCollate implements Responsable
 
         if (! $readResult->successful()) {
             throw new ProcessFailedException(
-                "Collate: failed to read PDF for metadata update — {$readResult->errorOutput()}",
+                'Collate: failed to read PDF for metadata update — '.$readResult->errorOutput(),
                 $readResult->exitCode(),
                 $readResult->errorOutput(),
             );
@@ -873,21 +874,22 @@ class PendingCollate implements Responsable
         if ($infoRef) {
             // Merge with existing values so that setting only e.g. Title
             // does not wipe Author, Producer, CreationDate, etc.
-            $existingValues = $qpdfObjects["obj:{$infoRef}"]['value'] ?? [];
+            $existingValues = $qpdfObjects['obj:'.$infoRef]['value'] ?? [];
             $mergedValues = array_replace($existingValues, $infoFields);
 
-            $patch["obj:{$infoRef}"] = ['value' => $mergedValues];
+            $patch['obj:'.$infoRef] = ['value' => $mergedValues];
         } else {
             // No info object exists — create one and point the trailer at it.
             $maxId = 0;
             foreach (array_keys($qpdfObjects) as $key) {
-                if (preg_match('/^obj:(\d+) \d+ R$/', $key, $matches)) {
+                if (preg_match('/^obj:(\d+) \d+ R$/', (string) $key, $matches)) {
                     $maxId = max($maxId, (int) $matches[1]);
                 }
             }
+
             $newId = $maxId + 1;
-            $newRef = "obj:{$newId} 0 R";
-            $trailerRef = "{$newId} 0 R";
+            $newRef = sprintf('obj:%d 0 R', $newId);
+            $trailerRef = $newId.' 0 R';
 
             $patch[$newRef] = ['value' => $infoFields];
 
@@ -911,7 +913,7 @@ class PendingCollate implements Responsable
         ];
 
         if ($this->encryption) {
-            $updateCommand[] = "--password={$this->encryption['owner_password']}";
+            $updateCommand[] = '--password='.$this->encryption['owner_password'];
         }
 
         $updateCommand[] = $file;
@@ -924,7 +926,7 @@ class PendingCollate implements Responsable
 
         if (! $result->successful()) {
             throw new ProcessFailedException(
-                "Collate: failed to set metadata — {$result->errorOutput()}",
+                'Collate: failed to set metadata — '.$result->errorOutput(),
                 $result->exitCode(),
                 $result->errorOutput(),
             );
@@ -943,7 +945,7 @@ class PendingCollate implements Responsable
         $command = [$this->collate->binaryPath()];
 
         if ($this->decryptPassword !== null) {
-            $command[] = "--password={$this->decryptPassword}";
+            $command[] = '--password='.$this->decryptPassword;
             $command[] = '--decrypt';
         }
 
@@ -952,11 +954,7 @@ class PendingCollate implements Responsable
         // primary input so that document metadata is preserved. Inside --pages,
         // use "." to refer back to this primary input file.
         // When there is no source at all, --empty is the correct base.
-        if ($this->source) {
-            $command[] = $this->source;
-        } else {
-            $command[] = '--empty';
-        }
+        $command[] = $this->source ?: '--empty';
 
         // The --pages block controls which pages end up in the output.
         // "." refers to the primary input file specified above.
@@ -973,7 +971,7 @@ class PendingCollate implements Responsable
             }
 
             $command[] = '--';
-        } elseif (! empty($this->additions)) {
+        } elseif ($this->additions !== []) {
             $command[] = '--pages';
 
             foreach ($this->additions as $addition) {
@@ -986,7 +984,7 @@ class PendingCollate implements Responsable
 
         // Rotations
         foreach ($this->rotations as $rotation) {
-            $command[] = "--rotate=+{$rotation['degrees']}:{$rotation['pages']}";
+            $command[] = sprintf('--rotate=+%d:%s', $rotation['degrees'], $rotation['pages']);
         }
 
         // Encryption
@@ -1000,10 +998,8 @@ class PendingCollate implements Responsable
             $command[] = $this->encryption['owner_password'];
             $command[] = (string) $this->encryption['bit_length'];
 
-            if (! empty($this->restrictions)) {
-                foreach ($this->restrictions as $restriction) {
-                    $command[] = self::RESTRICTIONS[$restriction];
-                }
+            foreach ($this->restrictions as $restriction) {
+                $command[] = self::RESTRICTIONS[$restriction];
             }
 
             $command[] = '--';
@@ -1078,7 +1074,7 @@ class PendingCollate implements Responsable
 
         if ($stream === null) {
             throw new FileNotFoundException(
-                "Collate: could not read file '{$file}' from disk."
+                sprintf("Collate: could not read file '%s' from disk.", $file)
             );
         }
 

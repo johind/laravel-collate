@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Storage;
 use Johind\Collate\Facades\Collate;
 
-beforeEach(function () {
+beforeEach(function (): void {
     if (! qpdfAvailable()) {
         test()->skip('qpdf binary not available');
     }
@@ -15,7 +15,7 @@ beforeEach(function () {
     Storage::disk('s3')->put('remote.pdf', file_get_contents(fixturePath('single-page.pdf')));
 });
 
-it('does not delete remote temp files until the instance is destroyed', function () {
+it('does not delete remote temp files until the instance is destroyed', function (): void {
     // We need to use the real Collate class but with the fake disk
     $pdf = Collate::disk('s3')->open('remote.pdf');
 

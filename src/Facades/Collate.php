@@ -22,7 +22,7 @@ class Collate extends Facade
      */
     public static function fake(): CollateFake
     {
-        return tap(new CollateFake, function ($fake) {
+        return tap(new CollateFake, function ($fake): void {
             static::swap($fake);
         });
     }

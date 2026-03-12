@@ -5,11 +5,11 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Storage;
 use Johind\Collate\Facades\Collate;
 
-beforeEach(function () {
+beforeEach(function (): void {
     Storage::fake('local');
 });
 
-it('successfully removes the last page of a document', function () {
+it('successfully removes the last page of a document', function (): void {
     $path = fixturePath('single-page.pdf'); // 1 page
     Storage::put('single.pdf', file_get_contents($path));
 
@@ -28,7 +28,7 @@ it('successfully removes the last page of a document', function () {
     expect(Collate::open('empty.pdf')->pageCount())->toBe(1);
 });
 
-it('successfully removes the last page of a multi-page document', function () {
+it('successfully removes the last page of a multi-page document', function (): void {
     $path = fixturePath('multi-page.pdf');
     Storage::put('multi.pdf', file_get_contents($path));
 

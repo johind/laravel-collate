@@ -145,9 +145,9 @@ class PendingCollateFake extends PendingCollate
     {
         $this->downloadedAs = $filename;
 
-        return new StreamedResponse(fn () => null, 200, [
+        return new StreamedResponse(fn (): null => null, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Content-Disposition' => sprintf('attachment; filename="%s"', $filename),
         ]);
     }
 
@@ -155,9 +155,9 @@ class PendingCollateFake extends PendingCollate
     {
         $this->streamedAs = $filename;
 
-        return new StreamedResponse(fn () => null, 200, [
+        return new StreamedResponse(fn (): null => null, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => "inline; filename=\"{$filename}\"",
+            'Content-Disposition' => sprintf('inline; filename="%s"', $filename),
         ]);
     }
 
@@ -171,7 +171,7 @@ class PendingCollateFake extends PendingCollate
         $this->wasSplit = true;
         $count = $this->pageCount();
 
-        return collect(range(1, $count))->map(fn ($page) => str_replace('{page}', (string) $page, $path)
+        return collect(range(1, $count))->map(fn ($page): string => str_replace('{page}', (string) $page, $path)
         );
     }
 

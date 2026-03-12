@@ -76,7 +76,7 @@ class CollateFake extends Collate
      */
     public function assertSaved(?string $path = null, ?callable $callback = null): void
     {
-        $saved = $this->recorded->filter(fn (PendingCollateFake $p) => $p->wasSaved());
+        $saved = $this->recorded->filter(fn (PendingCollateFake $p): bool => $p->wasSaved());
 
         if ($path === null && $callback === null) {
             PHPUnit::assertTrue($saved->isNotEmpty(), 'Expected a PDF to be saved, but none was.');
@@ -84,7 +84,7 @@ class CollateFake extends Collate
             return;
         }
 
-        $matching = $saved->filter(function (PendingCollateFake $p) use ($path, $callback) {
+        $matching = $saved->filter(function (PendingCollateFake $p) use ($path, $callback): bool {
             if ($path !== null && $p->savedPath() !== $path) {
                 return false;
             }
@@ -99,7 +99,7 @@ class CollateFake extends Collate
         PHPUnit::assertTrue(
             $matching->isNotEmpty(),
             $path
-                ? "Expected a PDF to be saved to [{$path}], but it was not."
+                ? sprintf('Expected a PDF to be saved to [%s], but it was not.', $path)
                 : 'Expected a PDF to be saved matching the given callback, but none matched.',
         );
     }
@@ -109,9 +109,9 @@ class CollateFake extends Collate
      */
     public function assertNothingSaved(): void
     {
-        $saved = $this->recorded->filter(fn (PendingCollateFake $p) => $p->wasSaved());
+        $saved = $this->recorded->filter(fn (PendingCollateFake $p): bool => $p->wasSaved());
 
-        PHPUnit::assertTrue($saved->isEmpty(), "Expected no PDFs to be saved, but {$saved->count()} were.");
+        PHPUnit::assertTrue($saved->isEmpty(), sprintf('Expected no PDFs to be saved, but %d were.', $saved->count()));
     }
 
     /**
@@ -119,7 +119,7 @@ class CollateFake extends Collate
      */
     public function assertDownloaded(?string $filename = null, ?callable $callback = null): void
     {
-        $downloaded = $this->recorded->filter(fn (PendingCollateFake $p) => $p->wasDownloaded());
+        $downloaded = $this->recorded->filter(fn (PendingCollateFake $p): bool => $p->wasDownloaded());
 
         if ($filename === null && $callback === null) {
             PHPUnit::assertTrue($downloaded->isNotEmpty(), 'Expected a PDF to be downloaded, but none was.');
@@ -127,7 +127,7 @@ class CollateFake extends Collate
             return;
         }
 
-        $matching = $downloaded->filter(function (PendingCollateFake $p) use ($filename, $callback) {
+        $matching = $downloaded->filter(function (PendingCollateFake $p) use ($filename, $callback): bool {
             if ($filename !== null && $p->downloadedFilename() !== $filename) {
                 return false;
             }
@@ -142,7 +142,7 @@ class CollateFake extends Collate
         PHPUnit::assertTrue(
             $matching->isNotEmpty(),
             $filename
-                ? "Expected a PDF to be downloaded as [{$filename}], but it was not."
+                ? sprintf('Expected a PDF to be downloaded as [%s], but it was not.', $filename)
                 : 'Expected a PDF to be downloaded matching the given callback, but none matched.',
         );
     }
@@ -152,9 +152,9 @@ class CollateFake extends Collate
      */
     public function assertNothingDownloaded(): void
     {
-        $downloaded = $this->recorded->filter(fn (PendingCollateFake $p) => $p->wasDownloaded());
+        $downloaded = $this->recorded->filter(fn (PendingCollateFake $p): bool => $p->wasDownloaded());
 
-        PHPUnit::assertTrue($downloaded->isEmpty(), "Expected no PDFs to be downloaded, but {$downloaded->count()} were.");
+        PHPUnit::assertTrue($downloaded->isEmpty(), sprintf('Expected no PDFs to be downloaded, but %d were.', $downloaded->count()));
     }
 
     /**
@@ -162,7 +162,7 @@ class CollateFake extends Collate
      */
     public function assertStreamed(?string $filename = null, ?callable $callback = null): void
     {
-        $streamed = $this->recorded->filter(fn (PendingCollateFake $p) => $p->wasStreamed());
+        $streamed = $this->recorded->filter(fn (PendingCollateFake $p): bool => $p->wasStreamed());
 
         if ($filename === null && $callback === null) {
             PHPUnit::assertTrue($streamed->isNotEmpty(), 'Expected a PDF to be streamed, but none was.');
@@ -170,7 +170,7 @@ class CollateFake extends Collate
             return;
         }
 
-        $matching = $streamed->filter(function (PendingCollateFake $p) use ($filename, $callback) {
+        $matching = $streamed->filter(function (PendingCollateFake $p) use ($filename, $callback): bool {
             if ($filename !== null && $p->streamedFilename() !== $filename) {
                 return false;
             }
@@ -185,7 +185,7 @@ class CollateFake extends Collate
         PHPUnit::assertTrue(
             $matching->isNotEmpty(),
             $filename
-                ? "Expected a PDF to be streamed as [{$filename}], but it was not."
+                ? sprintf('Expected a PDF to be streamed as [%s], but it was not.', $filename)
                 : 'Expected a PDF to be streamed matching the given callback, but none matched.',
         );
     }
@@ -195,9 +195,9 @@ class CollateFake extends Collate
      */
     public function assertNothingStreamed(): void
     {
-        $streamed = $this->recorded->filter(fn (PendingCollateFake $p) => $p->wasStreamed());
+        $streamed = $this->recorded->filter(fn (PendingCollateFake $p): bool => $p->wasStreamed());
 
-        PHPUnit::assertTrue($streamed->isEmpty(), "Expected no PDFs to be streamed, but {$streamed->count()} were.");
+        PHPUnit::assertTrue($streamed->isEmpty(), sprintf('Expected no PDFs to be streamed, but %d were.', $streamed->count()));
     }
 
     /**
@@ -205,7 +205,7 @@ class CollateFake extends Collate
      */
     public function assertSplit(): void
     {
-        $split = $this->recorded->filter(fn (PendingCollateFake $p) => $p->wasSplit());
+        $split = $this->recorded->filter(fn (PendingCollateFake $p): bool => $p->wasSplit());
 
         PHPUnit::assertTrue($split->isNotEmpty(), 'Expected a PDF to be split, but none was.');
     }
