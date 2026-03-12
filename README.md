@@ -50,11 +50,17 @@ return [
 ```php
 use Johind\Collate\Facades\Collate;
 
-Collate::open('contracts/draft.pdf')
-    ->addPages('contracts/appendix.pdf', range: '1-3')
-    ->overlay('assets/watermark.pdf')
-    ->encrypt('secret')
-    ->save('contracts/final.pdf');
+$file = $request->file('document');
+
+Collate::open($file)
+    ->rotate(90, pages: '1')                 // Fix orientation for specific pages
+    ->underlay('branding/letterhead.pdf')    // Apply professional backgrounds
+    ->addPages('legal/standard-terms.pdf')   // Assemble complex documents on the fly
+    ->withMetadata(title: 'Client Report')   // Inject searchable document properties
+    ->encrypt('client-password')             // Secure the PDF...
+    ->restrict('modify', 'extract')          // ...and enforce strict permission constraints
+    ->linearize()                            // Optimize for instant web viewing (fast start)
+    ->save('reports/final.pdf', disk: 's3'); // Persist directly to S3
 ```
 
 ## Usage
