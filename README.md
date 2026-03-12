@@ -1,6 +1,8 @@
 # Manipulate PDFs within Laravel applications.
 
-Collate is a Laravel package that provides an intuitive API for manipulating PDFs. Originally built to prepare documents for AI/LLM ingestion, it handles all the complexities of PDF manipulation, including merging, extracting, encrypting, watermarking and much more besides. All of this is powered by [qpdf](https://qpdf.readthedocs.io/).
+Collate is a Laravel package that provides an intuitive API for manipulating PDFs. Originally built to prepare documents
+for AI/LLM ingestion, it handles all the complexities of PDF manipulation, including merging, extracting, encrypting,
+watermarking and much more besides. All of this is powered by [qpdf](https://qpdf.readthedocs.io/).
 
 ## Requirements
 
@@ -45,27 +47,37 @@ return [
 ];
 ```
 
-## Quick Example
+## Quick Examples
 
 ```php
 use Johind\Collate\Facades\Collate;
 
-$file = $request->file('document');
+// Prepare an uploaded document for archival
+Collate::open($request->file('document'))
+    ->addPages('legal/standard-terms.pdf')
+    ->withMetadata(title: 'Client Report 2025')
+    ->encrypt('client-password')
+    ->toDisk('s3')
+    ->save('reports/final.pdf');
 
-Collate::open($file)
-    ->rotate(90, range: '1')                 // Fix orientation for specific pages
-    ->underlay('branding/letterhead.pdf')    // Apply professional backgrounds
-    ->addPages('legal/standard-terms.pdf')   // Assemble complex documents on the fly
-    ->withMetadata(title: 'Client Report')   // Inject searchable document properties
-    ->encrypt('client-password')             // Secure the PDF...
-    ->restrict('modify', 'extract')          // ...and enforce strict permission constraints
-    ->linearize()                            // Optimize for instant web viewing (fast start)
-    ->save('reports/final.pdf', disk: 's3'); // Persist directly to S3
+// Merge and optimize multiple files for web viewing
+Collate::merge('cover.pdf', 'chapter-1.pdf', 'chapter-2.pdf')
+    ->overlay('branding/watermark.pdf')
+    ->linearize()
+    ->save('book.pdf');
 ```
+
+## Capabilities
+
+[Open](#opening-a-pdf) · [merge](#merging-pdfs) · [split](#splitting-a-pdf) · [add](#adding-pages) / [remove](#removing-pages) / [extract](#extracting-pages)
+pages · [rotate](#rotating-pages) · [overlay & underlay](#overlays--underlays) · [encrypt / decrypt](#encryption--decryption) · [restrict permissions](#encryption--decryption) · [flatten · linearize](#flattening--linearization) · [read & write metadata](#inspecting-pdfs) · [page count](#inspecting-pdfs) · [save to disk](#save-to-disk) · [download](#download) · [stream](#stream-inline) · [raw content](#raw-content) · [conditional operations](#conditional-operations) · [macros](#extending-with-macros).
 
 ## Usage
 
-Collate provides two entry points — `open()` for working with and manipulating an existing PDF, and `merge()` for combining multiple files. For read-only operations such as inspecting metadata or counting pages, use `inspect()` instead — it's a semantic alias for `open()` that signals no mutations are intended. All three return a fluent builder that lets you chain operations before saving or returning a response.
+Collate provides two entry points — `open()` for working with and manipulating an existing PDF, and `merge()` for
+combining multiple files. For read-only operations such as inspecting metadata or counting pages, use `inspect()`
+instead — it's a semantic alias for `open()` that signals no mutations are intended. All three return a fluent builder
+that lets you chain operations before saving or returning a response.
 
 ### Opening a PDF
 
@@ -121,32 +133,14 @@ Append entire files or specific pages to an existing document:
 
 ```php
 Collate::open('report.pdf')
-    ->addPage('appendix.pdf', pageNumber: 3)
-    ->save('report-with-appendix.pdf');
-
-// Add an entire file (all pages)
-Collate::open('contract.pdf')
-    ->addPages('signature-page.pdf')
-    ->save('signed-contract.pdf');
-
-// Add a range of pages
-Collate::open('report.pdf')
-    ->addPages('appendix.pdf', range: '1-5')
-    ->save('report-final.pdf');
-
-// Add multiple complete files at once
-Collate::open('report.pdf')
-    ->addPages(['exhibit-a.pdf', 'exhibit-b.pdf'])
-    ->save('report-with-exhibits.pdf');
-
-// Add different page ranges from different files (chain multiple calls)
-Collate::open('report.pdf')
-    ->addPages('appendix-a.pdf', range: '1-3')
-    ->addPages('appendix-b.pdf', range: '2-5')
-    ->save('report-final.pdf');
+    ->addPage('appendix.pdf', pageNumber: 3)           // single page from another file
+    ->addPages('terms.pdf', range: '1-5')               // page range
+    ->addPages(['exhibit-a.pdf', 'exhibit-b.pdf'])      // multiple complete files
+    ->save('final-report.pdf');
 ```
 
-> **Note:** The `range` parameter cannot be used when passing an array of files. Chain multiple `addPages()` calls instead.
+> **Note:** The `range` parameter cannot be used when passing an array of files. Chain multiple `addPages()` calls
+> instead.
 
 ### Removing Pages
 
@@ -182,17 +176,19 @@ Collate::open('document.pdf')
     ->save('selected-pages.pdf');
 ```
 
-Anywhere a page range string is accepted (`onlyPages()`, `addPages()`, `removePages()`, `rotate()`), you can use [qpdf range syntax](https://qpdf.readthedocs.io/en/stable/cli.html#page-ranges):
+Anywhere a page range string is accepted (`onlyPages()`, `addPages()`, `removePages()`, `rotate()`), you can
+use [qpdf range syntax](https://qpdf.readthedocs.io/en/stable/cli.html#page-ranges):
 
-| Expression | Meaning |
-|---|---|
-| `1-5` | Pages 1 through 5 |
-| `1,3,5` | Pages 1, 3, and 5 |
-| `1-3,7-9` | Pages 1–3 and 7–9 |
-| `z` | Last page |
-| `1-z` | All pages |
+| Expression | Meaning           |
+|------------|-------------------|
+| `1-5`      | Pages 1 through 5 |
+| `1,3,5`    | Pages 1, 3, and 5 |
+| `1-3,7-9`  | Pages 1–3 and 7–9 |
+| `z`        | Last page         |
+| `1-z`      | All pages         |
 
-Note: `onlyPages()` and `removePages()` are mutually exclusive — calling both on the same instance will throw a `BadMethodCallException`.
+Note: `onlyPages()` and `removePages()` are mutually exclusive and neither can be called more than once — calling both,
+or calling either twice, on the same instance will throw a `BadMethodCallException`.
 
 ### Splitting a PDF
 
@@ -205,7 +201,8 @@ $paths = Collate::open('multi-page.pdf')
 // $paths → Collection ['pages/page-1.pdf', 'pages/page-2.pdf', ...]
 ```
 
-> **Note:** Always include `{page}` in your path. Without it, every page will be written to the same destination, with each one overwriting the last.
+> **Note:** Always include `{page}` in your path. Without it, every page will be written to the same destination, with
+> each one overwriting the last.
 
 All operations — page selection, rotation, overlays, etc. — are applied before splitting, so you can chain them freely:
 
@@ -218,7 +215,7 @@ Collate::open('scanned.pdf')
 
 ### Rotating Pages
 
-Rotate pages by 90, 180, or 270 degrees:
+Rotate pages by 0, 90, 180, or 270 degrees:
 
 ```php
 Collate::open('scanned.pdf')
@@ -234,7 +231,7 @@ Collate::open('scanned.pdf')
 
 ### Overlays & Underlays
 
-Add watermarks, letterheads, or backgrounds:
+Add watermarks, letterheads, or backgrounds. Both methods accept a disk path or an `UploadedFile` instance:
 
 ```php
 // Overlay (on top — watermarks, stamps)
@@ -258,7 +255,8 @@ Collate::open('confidential.pdf')
     ->save('protected.pdf');
 ```
 
-For more control, use separate user and owner passwords and restrict specific permissions:
+For more control, use separate user and owner passwords and restrict specific permissions. Note that `restrict()` must
+be called after `encrypt()`:
 
 ```php
 Collate::open('confidential.pdf')
@@ -273,16 +271,16 @@ Collate::open('confidential.pdf')
 
 The following permissions can be passed to `restrict()`:
 
-| Permission | Effect |
-|---|---|
-| `print` | Disallow printing |
-| `modify` | Disallow modifications |
-| `extract` | Disallow text and image extraction |
-| `annotate` | Disallow adding annotations |
-| `assemble` | Disallow page assembly (inserting, rotating, etc.) |
-| `print-highres` | Disallow high-resolution printing |
-| `form` | Disallow filling in form fields |
-| `modify-other` | Disallow all other modifications |
+| Permission      | Effect                                             |
+|-----------------|----------------------------------------------------|
+| `print`         | Disallow printing                                  |
+| `modify`        | Disallow modifications                             |
+| `extract`       | Disallow text and image extraction                 |
+| `annotate`      | Disallow adding annotations                        |
+| `assemble`      | Disallow page assembly (inserting, rotating, etc.) |
+| `print-highres` | Disallow high-resolution printing                  |
+| `form`          | Disallow filling in form fields                    |
+| `modify-other`  | Disallow all other modifications                   |
 
 Decrypt a password-protected document:
 
@@ -301,29 +299,19 @@ Collate::open('locked.pdf')
     ->save('re-encrypted.pdf');
 ```
 
-### Flattening
+### Flattening & Linearization
 
-Flatten form fields and annotations into the page content:
-
-```php
-Collate::open('form-filled.pdf')
-    ->flatten()
-    ->save('flattened.pdf');
-```
-
-### Linearization
-
-Optimize a PDF for fast web viewing:
+Flatten form fields and annotations into the page content, or optimize a PDF for fast web viewing:
 
 ```php
-Collate::open('large-report.pdf')
-    ->linearize()
-    ->save('web-optimized.pdf');
+Collate::open('form-filled.pdf')->flatten()->save('flattened.pdf');
+
+Collate::open('large-report.pdf')->linearize()->save('web-optimized.pdf');
 ```
 
-### Metadata
+### Inspecting PDFs
 
-Read metadata from an existing PDF using `inspect()`:
+Use `inspect()` for read-only operations like reading metadata or counting pages:
 
 ```php
 $meta = Collate::inspect('document.pdf')->metadata();
@@ -336,6 +324,8 @@ $meta->creator;
 $meta->producer;
 $meta->creationDate;
 $meta->modDate;
+
+$count = Collate::inspect('document.pdf')->pageCount();
 ```
 
 Set metadata on the output document:
@@ -348,17 +338,9 @@ Collate::open('document.pdf')
     )
     ->save('branded-report.pdf');
 
-// Also accepts a PdfMetadata instance directly
+// Also accepts a PdfMetadata instance — named parameters override its values
 $meta = Collate::inspect('source.pdf')->metadata();
-Collate::open('target.pdf')->withMetadata($meta)->save('output.pdf');
-```
-
-### Page Count
-
-Get the number of pages in a document using `inspect()`:
-
-```php
-$count = Collate::inspect('document.pdf')->pageCount();
+Collate::open('target.pdf')->withMetadata($meta, author: 'New Author')->save('output.pdf');
 ```
 
 `pageCount()` and `metadata()` are also available on the builder if you need them mid-chain, even after a `merge()`:
@@ -377,19 +359,9 @@ Collate::merge('doc1.pdf', 'doc2.pdf')
 Collate::open('input.pdf')->save('output.pdf');
 ```
 
-Use `toDisk()` to save to a different disk than the one used to read the source, for example to read from local and write to S3:
-
-```php
-// Read from local, save to S3
-Collate::open('input.pdf')->toDisk('s3')->save('reports/output.pdf');
-
-// Read from S3, save back to local
-Collate::fromDisk('s3')->open('input.pdf')->toDisk('local')->save('output.pdf');
-```
-
 ### Download
 
-Return a download response from a controller:
+Return a download response from a controller. The filename defaults to `document.pdf` when omitted:
 
 ```php
 return Collate::open('invoice.pdf')->download('invoice-2024-001.pdf');
@@ -397,7 +369,7 @@ return Collate::open('invoice.pdf')->download('invoice-2024-001.pdf');
 
 ### Stream Inline
 
-Display the PDF inline in the browser:
+Display the PDF inline in the browser. The filename defaults to `document.pdf` when omitted:
 
 ```php
 return Collate::open('invoice.pdf')->stream('invoice-2024-001.pdf');
@@ -413,12 +385,31 @@ $content = Collate::open('document.pdf')->content();
 
 ### Returning from Controllers
 
-`PendingCollate` implements Laravel's `Responsable` interface, so you can return it directly from a controller:
+`PendingCollate` implements Laravel's `Responsable` interface, so you can return it directly from a controller. The
+default disposition is `inline` (streamed in the browser):
 
 ```php
 public function show()
 {
     return Collate::open('invoice.pdf');
+}
+```
+
+## Error Handling
+
+All exceptions thrown by Collate extend `Johind\Collate\Exceptions\CollateException`, which itself extends PHP's
+`RuntimeException`. When a `qpdf` command fails, a `Johind\Collate\Exceptions\ProcessFailedException` is thrown,
+exposing the `exitCode` and `errorOutput` from the underlying process. Invalid arguments (bad page ranges, unsupported
+rotation degrees, etc.) throw standard `InvalidArgumentException` or `BadMethodCallException` instances.
+
+```php
+use Johind\Collate\Exceptions\ProcessFailedException;
+
+try {
+    Collate::open('corrupted.pdf')->save('output.pdf');
+} catch (ProcessFailedException $e) {
+    $e->exitCode;    // qpdf exit code
+    $e->errorOutput; // stderr from qpdf
 }
 ```
 
@@ -435,7 +426,8 @@ Collate::open('document.pdf')
 
 ## Extending with Macros
 
-Both `Collate` and `PendingCollate` use the `Macroable` trait, so you can add custom methods to either class. Register macros on `PendingCollate` to add chainable operations:
+Both `Collate` and `PendingCollate` use the `Macroable` trait, so you can add custom methods to either class. Register
+macros on `PendingCollate` to add chainable operations:
 
 ```php
 use Johind\Collate\PendingCollate;
@@ -465,7 +457,10 @@ Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed re
 
 ## Contributing
 
-I appreciate your help in keeping Collate stable! I'm primarily looking for contributions that focus on fixing bugs, improving error handling, or performance. If you have an idea for a new feature, please open an issue to discuss it with me first, as I want to keep the package's scope focused. Please note that I do not provide monetary compensation for contributions.
+I appreciate your help in keeping Collate stable! I'm primarily looking for contributions that focus on fixing bugs,
+improving error handling, or performance. If you have an idea for a new feature, please open an issue to discuss it with
+me first, as I want to keep the package's scope focused. Please note that I do not provide monetary compensation for
+contributions.
 
 ## Security
 
