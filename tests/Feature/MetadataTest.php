@@ -44,6 +44,35 @@ describe('pageCount()', function (): void {
         expect($count)->toBe(2);
     });
 
+    it('memoizes the total page count across repeated calls', function (): void {
+        $pending = makeCollate()->inspect('multi.pdf');
+
+        $first = $pending->pageCount();
+        $second = $pending->pageCount();
+
+        expect($first)->toBe($second)
+            ->and(getProperty($pending, 'memoizedTotalPageCount'))->toBe($first);
+    });
+
+    it('invalidates the memoized page count after a mutation', function (): void {
+        $pending = makeCollate()->open('multi.pdf');
+        $pending->pageCount();
+
+        expect(getProperty($pending, 'memoizedTotalPageCount'))->not->toBeNull();
+
+        $pending->addPages('doc.pdf');
+
+        expect(getProperty($pending, 'memoizedTotalPageCount'))->toBeNull();
+    });
+
+    it('caches individual file page counts', function (): void {
+        $pending = makeCollate()->inspect('multi.pdf');
+        $pending->pageCount();
+
+        $cache = getProperty($pending, 'filePageCountCache');
+        expect($cache)->not->toBeEmpty();
+    });
+
     it('handles complex qpdf ranges in pageCount()', function (): void {
         // multi.pdf has 5 pages. z-1 reversed = 5 pages.
         $count = makeCollate()->open('multi.pdf')->onlyPages('z-1')->pageCount();

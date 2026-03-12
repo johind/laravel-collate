@@ -118,6 +118,28 @@ class PendingCollate implements Responsable
     protected array $metadata = [];
 
     /**
+     * The storage disk for the output file.
+     */
+    protected ?string $outputDisk = null;
+
+    /**
+     * Cache of page counts for individual files.
+     *
+     * @var array<string, int>
+     */
+    protected array $filePageCountCache = [];
+
+    /**
+     * Memoized total page count for the output document.
+     */
+    protected ?int $memoizedTotalPageCount = null;
+
+    /**
+     * Path to the processed PDF file.
+     */
+    protected ?string $processedPath = null;
+
+    /**
      * Temporary files downloaded from remote disks that should be cleaned up.
      *
      * @var list<string>
@@ -136,6 +158,17 @@ class PendingCollate implements Responsable
     public function __destruct()
     {
         $this->cleanupTempInputFiles();
+        $this->cleanupProcessedFile();
+    }
+
+    /**
+     * Set the storage disk for the output file.
+     */
+    public function toDisk(string $disk): static
+    {
+        $this->outputDisk = $disk;
+
+        return $this;
     }
 
     /**
@@ -145,6 +178,8 @@ class PendingCollate implements Responsable
         string|UploadedFile $file,
         int $pageNumber,
     ): static {
+        $this->clearCache();
+
         return $this->addPages(
             $file,
             (string) $pageNumber,
@@ -166,6 +201,8 @@ class PendingCollate implements Responsable
                 .'Chain multiple addPages() calls with range instead.'
             );
         }
+
+        $this->clearCache();
 
         $files = is_array($files) ? $files : [$files];
 
@@ -206,17 +243,14 @@ class PendingCollate implements Responsable
             );
         }
 
-        // Normalize the input into a clean, sorted array of integers,
-        // so we can process the gaps sequentially from start to finish.
-        $items = is_array($range) ? $range : explode(',', $range);
+        $this->clearCache();
 
+        $items = is_array($range) ? $range : explode(',', $range);
         $totalPageCount = $this->getFilePageCount($this->source);
 
-        $pagesToRemove = [];
+        // Standardize input into removal boundaries: [ [start, end], [start, end], ... ]
+        $intervals = [];
 
-        // Expand any hyphenated ranges (e.g. '5-10', '5-z') into individual
-        // page numbers before processing. intval alone would silently truncate
-        // '5-10' to 5, dropping pages 6 through 10.
         foreach ($items as $item) {
             $item = mb_trim((string) $item);
 
@@ -227,53 +261,74 @@ class PendingCollate implements Responsable
             }
 
             if (str_contains($item, '-')) {
-                [$start, $end] = explode('-', $item, 2);
-                $start = $start === 'z' ? $totalPageCount : (int) $start;
-                $end = $end === 'z' ? $totalPageCount : (int) $end;
-                array_push($pagesToRemove, ...range($start, $end));
+                [$startStr, $endStr] = explode('-', $item, 2);
+                $start = ($startStr === 'z') ? $totalPageCount : (int) $startStr;
+                $end = ($endStr === 'z') ? $totalPageCount : (int) $endStr;
+
+                if ($start < 1 || $end < 1) {
+                    throw new InvalidArgumentException(
+                        sprintf('Collate: page numbers must be at least 1. Got range: %d-%d.', $start, $end)
+                    );
+                }
+
+                // Normalise reverse ranges for the exclusion calculation
+                $intervals[] = [min($start, $end), max($start, $end)];
             } else {
-                $pagesToRemove[] = $item === 'z' ? $totalPageCount : (int) $item;
+                $page = ($item === 'z') ? $totalPageCount : (int) $item;
+
+                if ($page < 1) {
+                    throw new InvalidArgumentException(
+                        sprintf('Collate: page numbers must be at least 1. Got: %d.', $page)
+                    );
+                }
+
+                $intervals[] = [$page, $page];
             }
         }
 
-        foreach ($pagesToRemove as $page) {
-            if ($page < 1) {
-                throw new InvalidArgumentException(
-                    sprintf('Collate: page numbers must be at least 1. Got: %d.', $page)
-                );
-            }
-        }
+        // Merge overlapping intervals to simplify the keep-range calculation
+        usort($intervals, fn (array $a, array $b): int => $a[0] <=> $b[0]);
 
-        sort($pagesToRemove);
-        $pagesToRemove = array_unique($pagesToRemove);
+        $merged = [];
+        if ($intervals !== []) {
+            $current = $intervals[0];
+            for ($i = 1, $count = count($intervals); $i < $count; $i++) {
+                if ($intervals[$i][0] <= $current[1] + 1) {
+                    $current[1] = max($current[1], $intervals[$i][1]);
+                } else {
+                    $merged[] = $current;
+                    $current = $intervals[$i];
+                }
+            }
+
+            $merged[] = $current;
+        }
 
         $keepRanges = [];
-        $start = 1;
+        $lastEnd = 0;
 
-        // qpdf does not support negative page exclusions (like "!5").
-        // We must calculate the positive blocks of pages we want to KEEP.
-        // For example: To remove page 3, we must tell qpdf to keep "1-2" and "4-z".
-        foreach ($pagesToRemove as $skipPage) {
-            if ($skipPage > $totalPageCount) {
+        // Iterate through the merged "holes" (exclusions) and identify the "solid"
+        // blocks of pages in between that we want to tell qpdf to KEEP.
+        foreach ($merged as $interval) {
+            if ($interval[0] > $totalPageCount) {
                 continue;
             }
 
-            if ($skipPage > $start) {
-                $endOfKeepRange = $skipPage - 1;
+            if ($interval[0] > $lastEnd + 1) {
+                $start = $lastEnd + 1;
+                $end = $interval[0] - 1;
 
-                $keepRanges[] = ($start === $endOfKeepRange)
+                $keepRanges[] = ($start === $end)
                     ? (string) $start
-                    : sprintf('%d-%d', $start, $endOfKeepRange);
+                    : sprintf('%d-%d', $start, $end);
             }
 
-            // Move our internal pointer to the page immediately after the one we just skipped.
-            $start = $skipPage + 1;
+            $lastEnd = max($lastEnd, $interval[1]);
         }
 
-        // Only append the remainder of the document if there are pages left.
-        // 'z' is qpdf's variable for the final page of the document.
-        if ($start <= $totalPageCount) {
-            $keepRanges[] = $start.'-z';
+        if ($lastEnd < $totalPageCount) {
+            $start = $lastEnd + 1;
+            $keepRanges[] = sprintf('%d-z', $start);
         }
 
         $this->pageSelection = implode(',', $keepRanges);
@@ -299,6 +354,8 @@ class PendingCollate implements Responsable
                 'Collate: cannot call onlyPages() after removePages() or onlyPages() has already been called.'
             );
         }
+
+        $this->clearCache();
 
         if (is_array($range)) {
             $range = implode(',', $range);
@@ -327,6 +384,8 @@ class PendingCollate implements Responsable
             );
         }
 
+        $this->clearCache();
+
         $this->encryption = [
             'user_password' => $userPassword,
             'owner_password' => $ownerPassword ?? $userPassword,
@@ -341,6 +400,7 @@ class PendingCollate implements Responsable
      */
     public function decrypt(string $password): static
     {
+        $this->clearCache();
         $this->decryptPassword = $password;
 
         return $this;
@@ -370,6 +430,8 @@ class PendingCollate implements Responsable
             }
         }
 
+        $this->clearCache();
+
         array_push($this->restrictions, ...$permissions);
         $this->restrictions = array_values(array_unique($this->restrictions));
 
@@ -381,6 +443,7 @@ class PendingCollate implements Responsable
      */
     public function linearize(): static
     {
+        $this->clearCache();
         $this->linearize = true;
 
         return $this;
@@ -397,6 +460,8 @@ class PendingCollate implements Responsable
             );
         }
 
+        $this->clearCache();
+
         $this->rotations[] = [
             'degrees' => $degrees,
             'pages' => $range,
@@ -410,6 +475,7 @@ class PendingCollate implements Responsable
      */
     public function overlay(string|UploadedFile $file): static
     {
+        $this->clearCache();
         $this->overlayFile = $this->resolveFilePath($file);
 
         return $this;
@@ -420,6 +486,7 @@ class PendingCollate implements Responsable
      */
     public function underlay(string|UploadedFile $file): static
     {
+        $this->clearCache();
         $this->underlayFile = $this->resolveFilePath($file);
 
         return $this;
@@ -430,6 +497,7 @@ class PendingCollate implements Responsable
      */
     public function flatten(): static
     {
+        $this->clearCache();
         $this->flatten = true;
 
         return $this;
@@ -493,9 +561,13 @@ class PendingCollate implements Responsable
 
     /**
      * Set metadata on the output document.
+     *
+     * Pass a PdfMetadata instance as the first argument to copy all its values.
+     * Named parameters (author, subject, etc.) override the PdfMetadata values.
+     * To override the title, pass it as a named string parameter in a separate call.
      */
     public function withMetadata(
-        ?string $title = null,
+        string|PdfMetadata|null $title = null,
         ?string $author = null,
         ?string $subject = null,
         ?string $keywords = null,
@@ -504,16 +576,20 @@ class PendingCollate implements Responsable
         ?string $creationDate = null,
         ?string $modDate = null,
     ): static {
+        $meta = $title instanceof PdfMetadata ? $title->toArray() : [];
+
         $map = [
-            'Title' => $title,
-            'Author' => $author,
-            'Subject' => $subject,
-            'Keywords' => $keywords,
-            'Creator' => $creator,
-            'Producer' => $producer,
-            'CreationDate' => $creationDate,
-            'ModDate' => $modDate,
+            'Title' => $title instanceof PdfMetadata ? ($meta['Title'] ?? null) : $title,
+            'Author' => $author ?? ($meta['Author'] ?? null),
+            'Subject' => $subject ?? ($meta['Subject'] ?? null),
+            'Keywords' => $keywords ?? ($meta['Keywords'] ?? null),
+            'Creator' => $creator ?? ($meta['Creator'] ?? null),
+            'Producer' => $producer ?? ($meta['Producer'] ?? null),
+            'CreationDate' => $creationDate ?? ($meta['CreationDate'] ?? null),
+            'ModDate' => $modDate ?? ($meta['ModDate'] ?? null),
         ];
+
+        $this->clearCache();
 
         foreach ($map as $key => $value) {
             if ($value !== null) {
@@ -529,6 +605,10 @@ class PendingCollate implements Responsable
      */
     public function pageCount(): int
     {
+        if ($this->memoizedTotalPageCount !== null) {
+            return $this->memoizedTotalPageCount;
+        }
+
         $total = 0;
 
         if ($this->source !== null) {
@@ -541,19 +621,16 @@ class PendingCollate implements Responsable
             $total += $this->calculateSelectedPageCount($count, $addition['pages']);
         }
 
-        return $total;
+        return $this->memoizedTotalPageCount = $total;
     }
 
     /**
      * Save the final PDF to a path on the configured disk.
-     *
-     * Pass a disk name to save to a different disk than the one configured
-     * on the Collate instance, for example to read from local and write to S3.
      */
-    public function save(string $path, ?string $disk = null): bool
+    public function save(string $path): bool
     {
         $tempOutput = $this->process();
-        $disk = Storage::disk($disk ?? $this->collate->diskName());
+        $disk = Storage::disk($this->outputDisk ?? $this->collate->diskName());
 
         try {
             // Use a stream rather than file_get_contents to avoid loading
@@ -566,7 +643,10 @@ class PendingCollate implements Responsable
 
             return $disk->put($path, $stream);
         } finally {
-            @unlink($tempOutput);
+            // We don't unlink here if we are memoizing, cleanup happens in __destruct
+            if ($this->processedPath === null) {
+                @unlink($tempOutput);
+            }
         }
     }
 
@@ -593,18 +673,13 @@ class PendingCollate implements Responsable
     public function content(): string
     {
         $tempOutput = $this->process();
+        $content = file_get_contents($tempOutput);
 
-        try {
-            $content = file_get_contents($tempOutput);
-
-            if ($content === false) {
-                throw new RuntimeException('Collate: failed to read temp file: '.$tempOutput);
-            }
-
-            return $content;
-        } finally {
-            @unlink($tempOutput);
+        if ($content === false) {
+            throw new RuntimeException('Collate: failed to read temp file: '.$tempOutput);
         }
+
+        return $content;
     }
 
     /**
@@ -651,7 +726,7 @@ class PendingCollate implements Responsable
                 );
             }
 
-            $disk = Storage::disk($this->collate->diskName());
+            $disk = Storage::disk($this->outputDisk ?? $this->collate->diskName());
             $paths = collect();
 
             // qpdf's %d produces zero-padded page numbers (e.g. "01", "02"),
@@ -674,7 +749,7 @@ class PendingCollate implements Responsable
 
             return $paths;
         } finally {
-            @unlink($processedFile);
+            // Cleanup split files, but NOT the processed file if memoized
             foreach ($splitFiles as $tempFile) {
                 @unlink($tempFile);
             }
@@ -696,13 +771,9 @@ class PendingCollate implements Responsable
             function () use ($tempOutput): void {
                 // Stream the file to the output buffer in chunks rather than
                 // reading the whole PDF into a PHP string first.
-                try {
-                    $stream = fopen($tempOutput, 'r');
-                    fpassthru($stream);
-                    fclose($stream);
-                } finally {
-                    @unlink($tempOutput);
-                }
+                $stream = fopen($tempOutput, 'r');
+                fpassthru($stream);
+                fclose($stream);
             },
             $filename,
             ['Content-Type' => 'application/pdf'],
@@ -723,6 +794,10 @@ class PendingCollate implements Responsable
      */
     protected function getFilePageCount(string $file): int
     {
+        if (isset($this->filePageCountCache[$file])) {
+            return $this->filePageCountCache[$file];
+        }
+
         $command = [
             $this->collate->binaryPath(),
             '--show-npages',
@@ -744,7 +819,7 @@ class PendingCollate implements Responsable
             );
         }
 
-        return (int) mb_trim($result->output());
+        return $this->filePageCountCache[$file] = (int) mb_trim($result->output());
     }
 
     /**
@@ -794,6 +869,10 @@ class PendingCollate implements Responsable
      */
     protected function process(?string $pageOverride = null): string
     {
+        if ($pageOverride === null && $this->processedPath !== null && file_exists($this->processedPath)) {
+            return $this->processedPath;
+        }
+
         $tempOutput = $this->tempFilePath();
         $command = $this->buildCommand($tempOutput, $pageOverride);
 
@@ -818,11 +897,13 @@ class PendingCollate implements Responsable
                 }
             }
 
+            if ($pageOverride === null) {
+                $this->processedPath = $tempOutput;
+            }
+
             return $tempOutput;
         } finally {
-            // We no longer clean up temp input files here, as it would break
-            // subsequent output calls (save(), content(), etc.) when using
-            // remote source files. Cleanup happens in __destruct().
+            // Input files are cleaned up in __destruct
         }
     }
 
@@ -1086,6 +1167,15 @@ class PendingCollate implements Responsable
     }
 
     /**
+     * Clear memoized page counts and processed paths.
+     */
+    protected function clearCache(): void
+    {
+        $this->memoizedTotalPageCount = null;
+        $this->cleanupProcessedFile();
+    }
+
+    /**
      * Clean up any temporary input files downloaded from remote disks.
      */
     protected function cleanupTempInputFiles(): void
@@ -1095,6 +1185,17 @@ class PendingCollate implements Responsable
         }
 
         $this->tempInputFiles = [];
+    }
+
+    /**
+     * Clean up the memoized processed file.
+     */
+    protected function cleanupProcessedFile(): void
+    {
+        if ($this->processedPath !== null) {
+            @unlink($this->processedPath);
+            $this->processedPath = null;
+        }
     }
 
     /**

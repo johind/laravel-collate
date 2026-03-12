@@ -51,6 +51,22 @@ it('split() returns correctly sized collection based on total pages', function (
         ->and($paths[5])->toBe('page-6.pdf');
 });
 
+describe('toDisk()', function (): void {
+    it('exposes the output disk via outputDisk()', function (): void {
+        $fake = new CollateFake;
+        $pending = $fake->open('doc.pdf')->toDisk('s3');
+
+        expect($pending->outputDisk())->toBe('s3');
+    });
+
+    it('returns null when no output disk is set', function (): void {
+        $fake = new CollateFake;
+        $pending = $fake->open('doc.pdf');
+
+        expect($pending->outputDisk())->toBeNull();
+    });
+});
+
 describe('assertions', function (): void {
     it('can assert that a PDF was saved', function (): void {
         $fake = new CollateFake;
