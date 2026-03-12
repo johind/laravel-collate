@@ -2,6 +2,15 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.4.1 - 2026-03-12
+
+### Added
+- **AI Core Guideline:** Added a comprehensive API reference and usage guide for AI assistants in `resources/boost/guidelines/core.blade.php`
+- **PDF Pipeline Skill:** Added `collate-pdf-pipeline` skill focusing on composition patterns and real-world workflows (replaces `collate-pdf-manipulation`)
+
+### Documentation
+- Improved AI guidance with practical pipeline patterns, cross-disk workflows, and real-world recipes
+
 ## 1.4.0 - 2026-03-12
 
 This release significantly improves the fluent API, adds professional-grade performance optimizations, and standardizes terminology across the package.
