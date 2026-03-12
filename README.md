@@ -1,8 +1,10 @@
-# Manipulate PDFs within Laravel applications.
+# Collate — PDF Manipulation for Laravel
 
-Collate is a Laravel package that provides an intuitive API for manipulating PDFs. Originally built to prepare documents
-for AI/LLM ingestion, it handles all the complexities of PDF manipulation, including merging, extracting, encrypting,
-watermarking and much more besides. All of this is powered by [qpdf](https://qpdf.readthedocs.io/).
+Collate is a Laravel package that provides a fluent API for manipulating PDFs.
+
+It supports common operations including merging, splitting, extracting pages,
+watermarking, encryption, metadata editing, and web optimization — all powered
+by [qpdf](https://qpdf.readthedocs.io/).
 
 ## Requirements
 
@@ -133,9 +135,9 @@ Append entire files or specific pages to an existing document:
 
 ```php
 Collate::open('report.pdf')
-    ->addPage('appendix.pdf', pageNumber: 3)           // single page from another file
-    ->addPages('terms.pdf', range: '1-5')               // page range
-    ->addPages(['exhibit-a.pdf', 'exhibit-b.pdf'])      // multiple complete files
+    ->addPage('appendix.pdf', pageNumber: 3)       // single page from another file
+    ->addPages('terms.pdf', range: '1-5')          // page range
+    ->addPages(['exhibit-a.pdf', 'exhibit-b.pdf']) // multiple complete files
     ->save('final-report.pdf');
 ```
 
