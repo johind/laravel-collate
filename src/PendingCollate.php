@@ -231,11 +231,9 @@ class PendingCollate implements Responsable
      */
     public function removePages(string|array $range): static
     {
-        if ($this->source === null) {
-            throw new BadMethodCallException(
-                'Collate: cannot call removePages() when no source file is set. Use open() or inspect() first.'
-            );
-        }
+        $source = $this->source ?? throw new BadMethodCallException(
+            'Collate: cannot call removePages() when no source file is set. Use open() or inspect() first.'
+        );
 
         if ($this->pageSelection !== null) {
             throw new BadMethodCallException(
@@ -246,7 +244,7 @@ class PendingCollate implements Responsable
         $this->clearCache();
 
         $items = is_array($range) ? $range : explode(',', $range);
-        $totalPageCount = $this->getFilePageCount($this->source);
+        $totalPageCount = $this->getFilePageCount($source);
 
         // Standardize input into removal boundaries: [ [start, end], [start, end], ... ]
         $intervals = [];
@@ -528,24 +526,36 @@ class PendingCollate implements Responsable
         if (! $result->successful()) {
             throw new ProcessFailedException(
                 'Collate: failed to read PDF metadata — '.$result->errorOutput(),
-                $result->exitCode(),
+                $result->exitCode() ?? 1,
                 $result->errorOutput(),
             );
         }
 
         $json = json_decode($result->output(), true);
-        $qpdfObjects = $json['qpdf'][1] ?? [];
+
+        if (! is_array($json) || ! is_array($json['qpdf'] ?? null) || ! is_array($json['qpdf'][1] ?? null)) {
+            throw new RuntimeException('Collate: failed to parse qpdf JSON output — unexpected structure.');
+        }
+
+        /** @var array<string, mixed> $qpdfObjects */
+        $qpdfObjects = $json['qpdf'][1];
         $info = [];
 
         // The info ref is stored as e.g. "6 0 R" in the trailer value.
-        $infoRef = $qpdfObjects['trailer']['value']['/Info'] ?? null;
+        $trailerValue = is_array($qpdfObjects['trailer'] ?? null) && is_array($qpdfObjects['trailer']['value'] ?? null)
+            ? $qpdfObjects['trailer']['value']
+            : [];
+        $infoRef = $trailerValue['/Info'] ?? null;
 
         // The object key is "obj:6 0 R" — we must prepend "obj:" to the ref.
-        if ($infoRef && isset($qpdfObjects['obj:'.$infoRef]['value'])) {
-            foreach ($qpdfObjects['obj:'.$infoRef]['value'] as $field => $meta) {
+        $infoObject = is_string($infoRef) ? ($qpdfObjects['obj:'.$infoRef] ?? null) : null;
+        $infoValues = is_array($infoObject) && is_array($infoObject['value'] ?? null) ? $infoObject['value'] : null;
+
+        if ($infoValues !== null) {
+            foreach ($infoValues as $field => $meta) {
                 // Strip the leading "/" from the field key to normalise
                 // e.g. "/Title" → "Title" for PdfMetadata::fromArray.
-                $key = mb_ltrim($field, '/');
+                $key = mb_ltrim((string) $field, '/');
 
                 // qpdf JSON v2 encodes strings with a "u:" prefix.
                 if (is_string($meta) && str_starts_with($meta, 'u:')) {
@@ -641,7 +651,7 @@ class PendingCollate implements Responsable
                 throw new RuntimeException('Collate: failed to open temp file for reading: '.$tempOutput);
             }
 
-            return $disk->put($path, $stream);
+            return (bool) $disk->put($path, $stream);
         } finally {
             // We don't unlink here if we are memoizing, cleanup happens in __destruct
             if ($this->processedPath === null) {
@@ -721,13 +731,14 @@ class PendingCollate implements Responsable
             if (! $result->successful()) {
                 throw new ProcessFailedException(
                     'Collate: qpdf split failed — '.$result->errorOutput(),
-                    $result->exitCode(),
+                    $result->exitCode() ?? 1,
                     $result->errorOutput(),
                 );
             }
 
             $disk = Storage::disk($this->outputDisk ?? $this->collate->diskName());
-            $paths = collect();
+            /** @var Collection<int, string> $paths */
+            $paths = new Collection;
 
             // qpdf's %d produces zero-padded page numbers (e.g. "01", "02"),
             // so we use glob to discover the actual filenames instead of
@@ -742,7 +753,13 @@ class PendingCollate implements Responsable
                 // Stream each page file to disk rather than loading it into
                 // memory — individual pages of a large document can still be
                 // several megabytes each.
-                $disk->put($destination, fopen($tempFile, 'r'));
+                $stream = fopen($tempFile, 'r');
+
+                if ($stream === false) {
+                    throw new RuntimeException('Collate: failed to open split file for reading: '.$tempFile);
+                }
+
+                $disk->put($destination, $stream);
 
                 $paths->push($destination);
             }
@@ -772,6 +789,11 @@ class PendingCollate implements Responsable
                 // Stream the file to the output buffer in chunks rather than
                 // reading the whole PDF into a PHP string first.
                 $stream = fopen($tempOutput, 'r');
+
+                if ($stream === false) {
+                    throw new RuntimeException('Collate: failed to open temp file for streaming: '.$tempOutput);
+                }
+
                 fpassthru($stream);
                 fclose($stream);
             },
@@ -814,7 +836,7 @@ class PendingCollate implements Responsable
         if (! $result->successful()) {
             throw new ProcessFailedException(
                 sprintf("Collate: failed to count pages for file '%s' — %s", $file, $result->errorOutput()),
-                $result->exitCode(),
+                $result->exitCode() ?? 1,
                 $result->errorOutput(),
             );
         }
@@ -883,7 +905,7 @@ class PendingCollate implements Responsable
                 @unlink($tempOutput);
                 throw new ProcessFailedException(
                     'Collate: qpdf failed — '.$result->errorOutput(),
-                    $result->exitCode(),
+                    $result->exitCode() ?? 1,
                     $result->errorOutput(),
                 );
             }
@@ -938,24 +960,36 @@ class PendingCollate implements Responsable
         if (! $readResult->successful()) {
             throw new ProcessFailedException(
                 'Collate: failed to read PDF for metadata update — '.$readResult->errorOutput(),
-                $readResult->exitCode(),
+                $readResult->exitCode() ?? 1,
                 $readResult->errorOutput(),
             );
         }
 
         $existing = json_decode($readResult->output(), true);
-        $qpdfObjects = $existing['qpdf'][1] ?? [];
+
+        if (! is_array($existing) || ! is_array($existing['qpdf'] ?? null) || ! is_array($existing['qpdf'][1] ?? null)) {
+            throw new RuntimeException('Collate: failed to parse qpdf JSON output for metadata update — unexpected structure.');
+        }
+
+        /** @var array<string, mixed> $qpdfObjects */
+        $qpdfObjects = $existing['qpdf'][1];
 
         // The info ref is stored as e.g. "6 0 R" in the trailer value.
         // The corresponding object key is "obj:6 0 R".
-        $infoRef = $qpdfObjects['trailer']['value']['/Info'] ?? null;
+        $trailerValue = is_array($qpdfObjects['trailer'] ?? null) && is_array($qpdfObjects['trailer']['value'] ?? null)
+            ? $qpdfObjects['trailer']['value']
+            : [];
+        $infoRef = $trailerValue['/Info'] ?? null;
 
         $patch = [];
 
-        if ($infoRef) {
+        if (is_string($infoRef)) {
             // Merge with existing values so that setting only e.g. Title
             // does not wipe Author, Producer, CreationDate, etc.
-            $existingValues = $qpdfObjects['obj:'.$infoRef]['value'] ?? [];
+            $infoObject = $qpdfObjects['obj:'.$infoRef] ?? null;
+            $existingValues = is_array($infoObject) && is_array($infoObject['value'] ?? null)
+                ? $infoObject['value']
+                : [];
             $mergedValues = array_replace($existingValues, $infoFields);
 
             $patch['obj:'.$infoRef] = ['value' => $mergedValues];
@@ -1008,7 +1042,7 @@ class PendingCollate implements Responsable
         if (! $result->successful()) {
             throw new ProcessFailedException(
                 'Collate: failed to set metadata — '.$result->errorOutput(),
-                $result->exitCode(),
+                $result->exitCode() ?? 1,
                 $result->errorOutput(),
             );
         }
