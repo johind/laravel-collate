@@ -141,8 +141,9 @@ Collate::open('report.pdf')
     ->save('final-report.pdf');
 ```
 
-> **Note:** The `range` parameter cannot be used when passing an array of files. Chain multiple `addPages()` calls
-> instead.
+> [!IMPORTANT]
+> The `range` parameter cannot be used when passing an array of files. 
+> Chain multiple `addPages()` calls instead.
 
 ### Removing Pages
 
@@ -189,8 +190,9 @@ use [qpdf range syntax](https://qpdf.readthedocs.io/en/stable/cli.html#page-rang
 | `z`        | Last page         |
 | `1-z`      | All pages         |
 
-Note: `onlyPages()` and `removePages()` are mutually exclusive and neither can be called more than once — calling both,
-or calling either twice, on the same instance will throw a `BadMethodCallException`.
+> [!WARNING]
+> `onlyPages()` and `removePages()` are mutually exclusive and neither can be called more than once — calling both,
+> or calling either twice, on the same instance will throw a `BadMethodCallException`.
 
 ### Splitting a PDF
 
@@ -203,8 +205,9 @@ $paths = Collate::open('multi-page.pdf')
 // $paths → Collection ['pages/page-1.pdf', 'pages/page-2.pdf', ...]
 ```
 
-> **Note:** Always include `{page}` in your path. Without it, every page will be written to the same destination, with
-> each one overwriting the last.
+> [!IMPORTANT]
+> Always include `{page}` in your path. Without it, every page will be written 
+> to the same destination, with each one overwriting the last.
 
 All operations — page selection, rotation, overlays, etc. — are applied before splitting, so you can chain them freely:
 
