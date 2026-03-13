@@ -2,6 +2,21 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.4.2 - 2026-03-13
+
+### Fixed
+- Cast `config()` values to expected types in service provider
+- Use `Config::string()` to resolve binary path in `InstallCommand`
+- Add iterable value types to variadic `merge()` parameters
+- Resolve PHPStan max-level errors in `PendingCollate`
+
+### Chore
+- Set PHPStan analysis level to max
+
+### Documentation
+- Improve readability by using GitHub markdown alerts
+- Improve usage wording
+
 ## 1.4.1 - 2026-03-12
 
 ### Added
