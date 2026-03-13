@@ -51,6 +51,8 @@ class Collate
 
     /**
      * Merge multiple PDFs into a single document.
+     *
+     * @param  Closure|string|UploadedFile|array<int, string|UploadedFile>  ...$files
      */
     public function merge(Closure|string|UploadedFile|array ...$files): PendingCollate
     {

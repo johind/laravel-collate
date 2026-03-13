@@ -11,7 +11,7 @@ use Johind\Collate\CollateFake;
  * @method static \Johind\Collate\Collate fromDisk(string $disk)
  * @method static \Johind\Collate\PendingCollate open(string|\Illuminate\Http\UploadedFile $file)
  * @method static \Johind\Collate\PendingCollate inspect(string|\Illuminate\Http\UploadedFile $file)
- * @method static \Johind\Collate\PendingCollate merge(\Closure|string|\Illuminate\Http\UploadedFile|array ...$files)
+ * @method static \Johind\Collate\PendingCollate merge(\Closure|string|\Illuminate\Http\UploadedFile|array<int, string|\Illuminate\Http\UploadedFile> ...$files)
  *
  * @see \Johind\Collate\Collate
  */

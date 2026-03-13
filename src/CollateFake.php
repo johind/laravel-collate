@@ -26,7 +26,9 @@ class CollateFake extends Collate
             tempDirectory: '',
         );
 
-        $this->recorded = collect();
+        /** @var Collection<int, PendingCollateFake> $recorded */
+        $recorded = new Collection;
+        $this->recorded = $recorded;
     }
 
     /**
@@ -53,6 +55,8 @@ class CollateFake extends Collate
 
     /**
      * Merge multiple PDFs into a single document.
+     *
+     * @param  Closure|string|UploadedFile|array<int, string|UploadedFile>  ...$files
      */
     public function merge(Closure|string|UploadedFile|array ...$files): PendingCollateFake
     {
