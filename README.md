@@ -76,10 +76,7 @@ pages · [rotate](#rotating-pages) · [overlay & underlay](#overlays--underlays)
 
 ## Usage
 
-Collate provides two entry points — `open()` for working with and manipulating an existing PDF, and `merge()` for
-combining multiple files. For read-only operations such as inspecting metadata or counting pages, use `inspect()`
-instead — it's a semantic alias for `open()` that signals no mutations are intended. All three return a fluent builder
-that lets you chain operations before saving or returning a response.
+Use `open()` to manipulate an existing PDF, `merge()` to combine multiple files, or `inspect()` — a semantic alias for `open()` — for read-only operations like metadata and page count. All three return a fluent builder you can chain before saving or returning a response.
 
 ### Opening a PDF
 
