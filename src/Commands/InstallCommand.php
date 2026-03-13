@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Johind\Collate\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Process;
 
 class InstallCommand extends Command
@@ -21,7 +22,7 @@ class InstallCommand extends Command
             '--tag' => 'collate-config',
         ]);
 
-        $binaryPath = config('collate.binary_path', 'qpdf');
+        $binaryPath = Config::string('collate.binary_path', 'qpdf');
 
         $result = Process::run([$binaryPath, '--version']);
 
