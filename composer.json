@@ -1,6 +1,6 @@
 {
     "name": "johind/collate",
-    "description": "A Laravel package for PDF manipulation. Merge, split, and process documents for AI ingestion and general tasks.",
+    "description": "Laravel package for manipulating PDFs — merge, split, extract pages, watermark, encrypt, and optimize PDFs using qpdf.",
     "keywords": [
         "laravel",
         "pdf",
