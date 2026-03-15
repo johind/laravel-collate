@@ -22,13 +22,12 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
       fail-fast: true
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        php: [8.4, 8.3]
+        php: [8.4]
         laravel: [12.*, 11.*]
         stability: [prefer-lowest, prefer-stable]
         include:
@@ -37,11 +36,14 @@ jobs:
           - laravel: 11.*
             testbench: 9.*
 
-    name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }} - ${{ matrix.os }}
+    name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Install qpdf
+        run: sudo apt-get update && sudo apt-get install -y qpdf
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
