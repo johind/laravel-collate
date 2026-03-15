@@ -1,7 +1,7 @@
 # Collate — PDF Manipulation for Laravel
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/johind/collate.svg?style=flat-square)](https://packagist.org/packages/johind/collate)
-[![GitHub Tests Action Status](https://img.shields.io/github/actions/workflow/status/johind/collate/run-tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/johind/collate/actions?query=workflow%3Arun-tests+branch%3Amain)
+[![GitHub Tests Action Status](https://img.shields.io/github/actions/workflow/status/johind/collate/run-tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/johind/laravel-collate/actions?query=workflow%3Arun-tests+branch%3Amain)
 [![Total Downloads](https://img.shields.io/packagist/dt/johind/collate.svg?style=flat-square)](https://packagist.org/packages/johind/collate)
 
 Collate is a Laravel package that provides a fluent API for manipulating PDFs.
