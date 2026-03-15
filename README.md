@@ -366,7 +366,9 @@ Collate::open('input.pdf')->save('output.pdf');
 Return a download response from a controller. The filename defaults to `document.pdf` when omitted:
 
 ```php
-return Collate::open('invoice.pdf')->download('invoice-2024-001.pdf');
+return Collate::open('invoice.pdf')
+    ->encrypt('client-password')
+    ->download('invoice-2024-001.pdf');
 ```
 
 ### Stream Inline
@@ -374,7 +376,9 @@ return Collate::open('invoice.pdf')->download('invoice-2024-001.pdf');
 Display the PDF inline in the browser. The filename defaults to `document.pdf` when omitted:
 
 ```php
-return Collate::open('invoice.pdf')->stream('invoice-2024-001.pdf');
+return Collate::merge('cover.pdf', 'report.pdf')
+    ->linearize()
+    ->stream('quarterly-report.pdf');
 ```
 
 ### Raw Content
