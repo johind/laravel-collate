@@ -1,4 +1,4 @@
-# Collate — PDF Manipulation for Laravel
+# Collate — PDF manipulation for Laravel
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/johind/collate.svg?style=flat-square)](https://packagist.org/packages/johind/collate)
 [![GitHub Tests Action Status](https://img.shields.io/github/actions/workflow/status/johind/collate/run-tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/johind/laravel-collate/actions?query=workflow%3Arun-tests+branch%3Amain)
@@ -7,7 +7,7 @@
 Collate is a Laravel package that provides a fluent API for manipulating PDFs.
 
 It supports common operations including merging, splitting, extracting pages,
-watermarking, encryption, metadata editing, and web optimization — all powered
+watermarking, encryption, metadata editing, and web optimization, all powered
 by [qpdf](https://qpdf.readthedocs.io/).
 
 ## Requirements
@@ -45,7 +45,7 @@ return [
     // Path to the qpdf binary (default: 'qpdf')
     'binary_path' => env('COLLATE_BINARY_PATH', 'qpdf'),
 
-    // Default filesystem disk for reading/writing PDFs (default: null — uses your app's default disk)
+    // Default filesystem disk for reading/writing PDFs (default: null, uses your app's default disk)
     'default_disk' => env('COLLATE_DISK'),
 
     // Directory for temporary files during processing (automatically cleaned up)
@@ -80,7 +80,7 @@ pages · [rotate](#rotating-pages) · [overlay & underlay](#overlays--underlays)
 
 ## Usage
 
-Use `open()` to manipulate an existing PDF, `merge()` to combine multiple files, or `inspect()` — a semantic alias for `open()` — for read-only operations like metadata and page count. All three return a fluent builder you can chain before saving or returning a response.
+Use `open()` to manipulate an existing PDF, `merge()` to combine multiple files, or `inspect()` (a semantic alias for `open()`) for read-only operations like metadata and page count. All three return a fluent builder you can chain before saving or returning a response.
 
 ### Opening a PDF
 
@@ -395,8 +395,8 @@ $content = Collate::open('document.pdf')->content();
 
 ### Returning from Controllers
 
-`PendingCollate` implements Laravel's `Responsable` interface, so you can return it directly from a controller. The
-default disposition is `inline` (streamed in the browser):
+`PendingCollate` implements Laravel's `Responsable` interface, so you can return it directly from a controller. By
+default, the PDF is displayed in the browser:
 
 ```php
 public function show()
@@ -408,9 +408,11 @@ public function show()
 ## Error Handling
 
 All exceptions thrown by Collate extend `Johind\Collate\Exceptions\CollateException`, which itself extends PHP's
-`RuntimeException`. When a `qpdf` command fails, a `Johind\Collate\Exceptions\ProcessFailedException` is thrown,
-exposing the `exitCode` and `errorOutput` from the underlying process. Invalid arguments (bad page ranges, unsupported
-rotation degrees, etc.) throw standard `InvalidArgumentException` or `BadMethodCallException` instances.
+`RuntimeException`.
+
+When a `qpdf` command fails, a `Johind\Collate\Exceptions\ProcessFailedException` is thrown, exposing the `exitCode`
+and `errorOutput` from the underlying process. Invalid arguments (bad page ranges, unsupported rotation degrees, etc.)
+throw standard `InvalidArgumentException` or `BadMethodCallException` instances.
 
 ```php
 use Johind\Collate\Exceptions\ProcessFailedException;
@@ -436,8 +438,7 @@ Collate::open('document.pdf')
 
 ## Extending with Macros
 
-Both `Collate` and `PendingCollate` use the `Macroable` trait, so you can add custom methods to either class. Register
-macros on `PendingCollate` to add chainable operations:
+Register macros on `PendingCollate` to add chainable operations:
 
 ```php
 use Johind\Collate\PendingCollate;
