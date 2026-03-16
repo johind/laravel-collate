@@ -77,7 +77,7 @@ Collate::merge('cover.pdf', 'chapter-1.pdf', 'chapter-2.pdf')
 ## Capabilities
 
 [Open](#opening-a-pdf) · [merge](#merging-pdfs) · [split](#splitting-a-pdf) · [add](#adding-pages) / [remove](#removing-pages) / [extract](#extracting-pages)
-pages · [rotate](#rotating-pages) · [overlay & underlay](#overlays--underlays) · [encrypt / decrypt](#encryption--decryption) · [restrict permissions](#encryption--decryption) · [flatten · linearize](#flattening--linearization) · [read & write metadata](#inspecting-pdfs) · [page count](#inspecting-pdfs) · [save to disk](#save-to-disk) · [download](#download) · [stream](#stream-inline) · [raw content](#raw-content) · [conditional operations](#conditional-operations) · [macros](#extending-with-macros).
+pages · [rotate](#rotating-pages) · [overlay & underlay](#overlays--underlays) · [encrypt / decrypt](#encryption--decryption) · [restrict permissions](#encryption--decryption) · [flatten · linearize](#flattening--linearization) · [read & write metadata](#inspecting-pdfs) · [page count](#inspecting-pdfs) · [dd / dump](#debugging-the-qpdf-command) · [save to disk](#save-to-disk) · [download](#download) · [stream](#stream-inline) · [raw content](#raw-content) · [conditional operations](#conditional-operations) · [macros](#extending-with-macros).
 
 ## Usage
 
@@ -357,6 +357,24 @@ Collate::merge('doc1.pdf', 'doc2.pdf')
     ->when(fn ($pdf) => $pdf->pageCount() > 10, fn ($pdf) => $pdf->rotate(90))
     ->save('merged.pdf');
 ```
+
+### Debugging the qpdf Command
+
+Use `dump()` and `dd()` to inspect the underlying qpdf command that Collate builds, without executing it:
+
+```php
+Collate::open('document.pdf')
+    ->rotate(90)
+    ->encrypt('secret')
+    ->dump();  // dumps the command and continues the chain
+
+Collate::open('document.pdf')
+    ->overlay('watermark.pdf')
+    ->dd();    // dumps the command and stops execution
+```
+
+> [!WARNING]
+> The output may contain sensitive data such as file paths and passwords.
 
 ## Saving & Responses
 

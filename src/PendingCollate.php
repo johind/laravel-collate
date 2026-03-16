@@ -635,6 +635,28 @@ class PendingCollate implements Responsable
     }
 
     /**
+     * Dump the built qpdf command without executing it.
+     *
+     * WARNING: The output may contain sensitive data such as file paths and passwords.
+     */
+    public function dump(): static
+    {
+        dump($this->buildCommand('{output}'));
+
+        return $this;
+    }
+
+    /**
+     * Dump the built qpdf command and end the script.
+     *
+     * WARNING: The output may contain sensitive data such as file paths and passwords.
+     */
+    public function dd(): never
+    {
+        dd($this->buildCommand('{output}'));
+    }
+
+    /**
      * Save the final PDF to a path on the configured disk.
      */
     public function save(string $path): bool

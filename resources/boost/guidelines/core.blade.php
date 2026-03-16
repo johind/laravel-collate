@@ -49,6 +49,8 @@ All return a `PendingCollate` fluent builder.
 - `withMetadata(title:, author:, subject:, keywords:, creator:, producer:, creationDate:, modDate:)` — set metadata. First argument also accepts a `PdfMetadata` instance (named params override its values).
 - `metadata()` — returns `PdfMetadata` with: `title`, `author`, `subject`, `keywords`, `creator`, `producer`, `creationDate`, `modDate`.
 - `pageCount()` — get page count.
+- `dump()` — dump the built qpdf command and continue the chain. **Output may contain sensitive data.**
+- `dd()` — dump the built qpdf command and stop execution. **Output may contain sensitive data.**
 
 ### Output
 
