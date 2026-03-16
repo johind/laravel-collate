@@ -2,6 +2,15 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.4.3 - 2026-03-16
+
+### Added
+- `dump()` and `dd()` methods on `PendingCollate` to inspect the built qpdf command for debugging
+
+### Documentation
+- Document `dump()` and `dd()` debugging methods in README
+- Add `dump()` and `dd()` to AI core guideline
+
 ## 1.4.2 - 2026-03-13
 
 ### Fixed
