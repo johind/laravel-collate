@@ -13,7 +13,7 @@ pages, watermarking, encryption, editing metadata, and web optimisation.
 ## Requirements
 
 - PHP 8.4+
-- Laravel 11 or 12
+- Laravel 11, 12, or 13
 - [qpdf](https://qpdf.readthedocs.io/) v11.7.1 or higher installed on your system
 
 ## Installation
