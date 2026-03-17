@@ -244,92 +244,30 @@ class PendingCollate implements Responsable
         $this->clearCache();
 
         $items = is_array($range) ? $range : explode(',', $range);
-        $totalPageCount = $this->getFilePageCount($source);
-
-        // Standardize input into removal boundaries: [ [start, end], [start, end], ... ]
-        $intervals = [];
+        $exclusions = [];
 
         foreach ($items as $item) {
             $item = mb_trim((string) $item);
 
-            if ($item === '' || ! preg_match('/^(\d+|z)(-(\d+|z))?$/', $item)) {
+            if ($item === '' || ! preg_match('/^(\d+|z)(?:-(\d+|z))?(?::(odd|even))?$/i', $item, $matches)) {
                 throw new InvalidArgumentException(
                     sprintf("Collate: '%s' is not a valid page number or range.", $item)
                 );
             }
 
-            if (str_contains($item, '-')) {
-                [$startStr, $endStr] = explode('-', $item, 2);
-                $start = ($startStr === 'z') ? $totalPageCount : (int) $startStr;
-                $end = ($endStr === 'z') ? $totalPageCount : (int) $endStr;
+            $start = $matches[1] === 'z' ? null : (int) $matches[1];
+            $end = isset($matches[2]) && $matches[2] !== '' ? ($matches[2] === 'z' ? null : (int) $matches[2]) : null;
 
-                if ($start < 1 || $end < 1) {
-                    throw new InvalidArgumentException(
-                        sprintf('Collate: page numbers must be at least 1. Got range: %d-%d.', $start, $end)
-                    );
-                }
-
-                // Normalise reverse ranges for the exclusion calculation
-                $intervals[] = [min($start, $end), max($start, $end)];
-            } else {
-                $page = ($item === 'z') ? $totalPageCount : (int) $item;
-
-                if ($page < 1) {
-                    throw new InvalidArgumentException(
-                        sprintf('Collate: page numbers must be at least 1. Got: %d.', $page)
-                    );
-                }
-
-                $intervals[] = [$page, $page];
-            }
-        }
-
-        // Merge overlapping intervals to simplify the keep-range calculation
-        usort($intervals, fn (array $a, array $b): int => $a[0] <=> $b[0]);
-
-        $merged = [];
-        if ($intervals !== []) {
-            $current = $intervals[0];
-            for ($i = 1, $count = count($intervals); $i < $count; $i++) {
-                if ($intervals[$i][0] <= $current[1] + 1) {
-                    $current[1] = max($current[1], $intervals[$i][1]);
-                } else {
-                    $merged[] = $current;
-                    $current = $intervals[$i];
-                }
+            if (($start !== null && $start < 1) || ($end !== null && $end < 1)) {
+                throw new InvalidArgumentException(
+                    sprintf("Collate: page numbers must be at least 1. Got: '%s'.", $item)
+                );
             }
 
-            $merged[] = $current;
+            $exclusions[] = 'x'.$item;
         }
 
-        $keepRanges = [];
-        $lastEnd = 0;
-
-        // Iterate through the merged "holes" (exclusions) and identify the "solid"
-        // blocks of pages in between that we want to tell qpdf to KEEP.
-        foreach ($merged as $interval) {
-            if ($interval[0] > $totalPageCount) {
-                continue;
-            }
-
-            if ($interval[0] > $lastEnd + 1) {
-                $start = $lastEnd + 1;
-                $end = $interval[0] - 1;
-
-                $keepRanges[] = ($start === $end)
-                    ? (string) $start
-                    : sprintf('%d-%d', $start, $end);
-            }
-
-            $lastEnd = max($lastEnd, $interval[1]);
-        }
-
-        if ($lastEnd < $totalPageCount) {
-            $start = $lastEnd + 1;
-            $keepRanges[] = sprintf('%d-z', $start);
-        }
-
-        $this->pageSelection = implode(',', $keepRanges);
+        $this->pageSelection = '1-z,'.implode(',', $exclusions);
 
         return $this;
     }
@@ -868,6 +806,10 @@ class PendingCollate implements Responsable
 
     /**
      * Calculate how many pages a selection string would produce from a file.
+     *
+     * This evaluates qpdf page-range syntax including exclusions (`x` prefix)
+     * and positional `:odd`/`:even` modifiers. The modifiers select by position
+     * within the resulting page sequence, not by page number parity.
      */
     protected function calculateSelectedPageCount(int $totalInFile, ?string $selection): int
     {
@@ -875,37 +817,114 @@ class PendingCollate implements Responsable
             return $totalInFile;
         }
 
-        $count = 0;
+        $pages = $this->expandPageSelection($selection, $totalInFile);
+
+        return count($pages);
+    }
+
+    /**
+     * Expand a qpdf page-range expression into an ordered list of page numbers.
+     *
+     * Supports ranges (`1-5`), reverse ranges (`5-1`), `z` (last page),
+     * exclusions (`x3`, `x5-8`), and positional `:odd`/`:even` modifiers.
+     *
+     * @return list<int>
+     */
+    protected function expandPageSelection(string $selection, int $totalPages): array
+    {
+        // Extract a trailing :odd/:even modifier that applies to the entire expression.
+        $globalModifier = null;
+        if (preg_match('/:(odd|even)$/i', $selection, $globalMatch)) {
+            $globalModifier = mb_strtolower($globalMatch[1]);
+            $selection = mb_substr($selection, 0, -mb_strlen($globalMatch[0]));
+        }
+
         $items = explode(',', $selection);
+        $pages = [];
 
         foreach ($items as $item) {
             $item = mb_trim($item);
 
-            if (str_contains($item, '-')) {
-                [$startStr, $endStr] = explode('-', $item, 2);
-                $start = ($startStr === 'z') ? $totalInFile : (int) $startStr;
-                $end = ($endStr === 'z') ? $totalInFile : (int) $endStr;
+            if ($item === '') {
+                continue;
+            }
 
-                if ($startStr === 'z' || $endStr === 'z' || ($start <= $totalInFile)) {
-                    // qpdf supports reverse ranges like z-1, which results
-                    // in $totalInFile pages.
-                    if ($start > $end) {
-                        $count += ($start - $end + 1);
-                    } else {
-                        $actualStart = max(1, $start);
-                        $actualEnd = min($end, $totalInFile);
-                        $count += max(0, $actualEnd - $actualStart + 1);
-                    }
-                }
+            // Check for exclusion prefix
+            $isExclusion = str_starts_with($item, 'x');
+            if ($isExclusion) {
+                $item = mb_substr($item, 1);
+            }
+
+            // Extract per-item :odd/:even modifier
+            $itemModifier = null;
+            if (preg_match('/:(odd|even)$/i', $item, $modMatch)) {
+                $itemModifier = mb_strtolower($modMatch[1]);
+                $item = mb_substr($item, 0, -mb_strlen($modMatch[0]));
+            }
+
+            $expanded = $this->expandRangeToken($item, $totalPages);
+
+            // Apply per-item positional modifier
+            if ($itemModifier !== null) {
+                $expanded = $this->applyPositionalModifier($expanded, $itemModifier);
+            }
+
+            if ($isExclusion) {
+                $pages = array_values(array_diff($pages, $expanded));
             } else {
-                $page = ($item === 'z') ? $totalInFile : (int) $item;
-                if ($page >= 1 && $page <= $totalInFile) {
-                    $count++;
-                }
+                array_push($pages, ...$expanded);
             }
         }
 
-        return $count;
+        // Apply global positional modifier
+        if ($globalModifier !== null) {
+            $pages = $this->applyPositionalModifier($pages, $globalModifier);
+        }
+
+        return $pages;
+    }
+
+    /**
+     * Expand a single range token (e.g. "1", "3-8", "z", "z-1") into page numbers.
+     *
+     * @return list<int>
+     */
+    protected function expandRangeToken(string $token, int $totalPages): array
+    {
+        if (str_contains($token, '-')) {
+            [$startStr, $endStr] = explode('-', $token, 2);
+            $start = ($startStr === 'z') ? $totalPages : (int) $startStr;
+            $end = ($endStr === 'z') ? $totalPages : (int) $endStr;
+
+            $pages = [];
+            $step = $start <= $end ? 1 : -1;
+            for ($p = $start; $step > 0 ? $p <= $end : $p >= $end; $p += $step) {
+                if ($p >= 1 && $p <= $totalPages) {
+                    $pages[] = $p;
+                }
+            }
+
+            return $pages;
+        }
+
+        $page = ($token === 'z') ? $totalPages : (int) $token;
+
+        return ($page >= 1 && $page <= $totalPages) ? [$page] : [];
+    }
+
+    /**
+     * Filter a page list by positional parity (1st, 3rd, 5th… = odd; 2nd, 4th, 6th… = even).
+     *
+     * @param  list<int>  $pages
+     * @return list<int>
+     */
+    protected function applyPositionalModifier(array $pages, string $modifier): array
+    {
+        $offset = $modifier === 'odd' ? 0 : 1;
+
+        return array_values(
+            array_filter($pages, fn (int $index): bool => $index % 2 === $offset, ARRAY_FILTER_USE_KEY)
+        );
     }
 
     /**
