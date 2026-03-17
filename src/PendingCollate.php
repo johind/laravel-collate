@@ -204,6 +204,10 @@ class PendingCollate implements Responsable
 
         $this->clearCache();
 
+        if ($range !== null) {
+            $this->validatePageRange($range, false);
+        }
+
         $files = is_array($files) ? $files : [$files];
 
         foreach ($files as $file) {
@@ -243,28 +247,33 @@ class PendingCollate implements Responsable
 
         $this->clearCache();
 
-        $items = is_array($range) ? $range : explode(',', $range);
-        $exclusions = [];
+        $rangeString = is_array($range) ? implode(',', $range) : $range;
+        $rangeString = mb_trim($rangeString);
+        $this->validatePageRange($rangeString, false);
 
-        foreach ($items as $item) {
-            $item = mb_trim((string) $item);
+        if (preg_match('/:(odd|even)$/i', $rangeString)) {
+            $totalPages = $this->getFilePageCount($source);
+            $pagesToRemove = $this->expandPageSelection($rangeString, $totalPages);
+            $pagesToRemove = array_values(array_unique($pagesToRemove));
+            sort($pagesToRemove);
 
-            if ($item === '' || ! preg_match('/^(\d+|z)(?:-(\d+|z))?(?::(odd|even))?$/i', $item, $matches)) {
-                throw new InvalidArgumentException(
-                    sprintf("Collate: '%s' is not a valid page number or range.", $item)
-                );
+            if ($pagesToRemove === []) {
+                $this->pageSelection = '1-z';
+
+                return $this;
             }
 
-            $start = $matches[1] === 'z' ? null : (int) $matches[1];
-            $end = isset($matches[2]) && $matches[2] !== '' ? ($matches[2] === 'z' ? null : (int) $matches[2]) : null;
+            $exclusions = array_map(
+                static fn (int $page): string => 'x'.$page,
+                $pagesToRemove
+            );
+        } else {
+            $items = explode(',', $rangeString);
+            $exclusions = [];
 
-            if (($start !== null && $start < 1) || ($end !== null && $end < 1)) {
-                throw new InvalidArgumentException(
-                    sprintf("Collate: page numbers must be at least 1. Got: '%s'.", $item)
-                );
+            foreach ($items as $item) {
+                $exclusions[] = 'x'.mb_trim($item);
             }
-
-            $exclusions[] = 'x'.$item;
         }
 
         $this->pageSelection = '1-z,'.implode(',', $exclusions);
@@ -296,6 +305,8 @@ class PendingCollate implements Responsable
         if (is_array($range)) {
             $range = implode(',', $range);
         }
+
+        $this->validatePageRange($range, false);
 
         $this->pageSelection = $range;
 
@@ -817,6 +828,7 @@ class PendingCollate implements Responsable
             return $totalInFile;
         }
 
+        $this->validatePageRange($selection, true);
         $pages = $this->expandPageSelection($selection, $totalInFile);
 
         return count($pages);
@@ -832,12 +844,7 @@ class PendingCollate implements Responsable
      */
     protected function expandPageSelection(string $selection, int $totalPages): array
     {
-        // Extract a trailing :odd/:even modifier that applies to the entire expression.
-        $globalModifier = null;
-        if (preg_match('/:(odd|even)$/i', $selection, $globalMatch)) {
-            $globalModifier = mb_strtolower($globalMatch[1]);
-            $selection = mb_substr($selection, 0, -mb_strlen($globalMatch[0]));
-        }
+        [$selection, $globalModifier] = $this->extractGlobalModifier($selection);
 
         $items = explode(',', $selection);
         $pages = [];
@@ -878,10 +885,91 @@ class PendingCollate implements Responsable
 
         // Apply global positional modifier
         if ($globalModifier !== null) {
-            $pages = $this->applyPositionalModifier($pages, $globalModifier);
+            return $this->applyPositionalModifier($pages, $globalModifier);
         }
 
         return $pages;
+    }
+
+    /**
+     * Validate a page-range string for use in page selection.
+     *
+     * Ensures each comma-separated token matches qpdf page-range grammar:
+     * a page number or `z`, optionally followed by `-` and another page/`z`,
+     * optionally followed by `:odd` or `:even`. Exclusions (`x`) can be
+     * optionally allowed for internal selections.
+     *
+     * @throws InvalidArgumentException
+     */
+    protected function validatePageRange(string $range, bool $allowExclusions): void
+    {
+        // Strip a single trailing global :odd/:even modifier before splitting.
+        [$normalized] = $this->extractGlobalModifier($range);
+
+        $items = explode(',', $normalized);
+
+        foreach ($items as $item) {
+            $item = mb_trim($item);
+
+            if ($item === '') {
+                throw new InvalidArgumentException(
+                    sprintf("Collate: '%s' is not a valid page range — it contains empty segments.", $range)
+                );
+            }
+
+            $isExclusion = str_starts_with($item, 'x');
+            if ($isExclusion) {
+                if (! $allowExclusions) {
+                    throw new InvalidArgumentException(
+                        sprintf("Collate: '%s' is not a valid page number or range.", $item)
+                    );
+                }
+
+                $item = mb_substr($item, 1);
+                if ($item === '') {
+                    throw new InvalidArgumentException(
+                        sprintf("Collate: '%s' is not a valid page number or range.", $range)
+                    );
+                }
+            }
+
+            if (! preg_match('/^(\d+|z)(?:-(\d+|z))?(?::(odd|even))?$/i', $item, $matches)) {
+                throw new InvalidArgumentException(
+                    sprintf("Collate: '%s' is not a valid page number or range.", $item)
+                );
+            }
+
+            $start = $matches[1] === 'z' ? null : (int) $matches[1];
+            $end = isset($matches[2]) && $matches[2] !== '' ? ($matches[2] === 'z' ? null : (int) $matches[2]) : null;
+
+            if (($start !== null && $start < 1) || ($end !== null && $end < 1)) {
+                throw new InvalidArgumentException(
+                    sprintf("Collate: page numbers must be at least 1. Got: '%s'.", $item)
+                );
+            }
+        }
+    }
+
+    /**
+     * Extract a trailing global :odd/:even modifier if present.
+     *
+     * @return array{0: string, 1: string|null}
+     */
+    protected function extractGlobalModifier(string $range): array
+    {
+        if (preg_match('/(\d|z):(odd|even)$/i', $range, $globalMatch)) {
+            $lastComma = mb_strrpos($range, ',');
+            $lastItem = $lastComma !== false ? mb_substr($range, $lastComma + 1) : $range;
+
+            if (! str_starts_with(mb_trim($lastItem), 'x')) {
+                $modifier = mb_strtolower($globalMatch[2]);
+                $normalized = mb_substr($range, 0, -mb_strlen(':'.$globalMatch[2]));
+
+                return [$normalized, $modifier];
+            }
+        }
+
+        return [$range, null];
     }
 
     /**
