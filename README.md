@@ -76,12 +76,19 @@ Collate::merge('cover.pdf', 'chapter-1.pdf', 'chapter-2.pdf')
 
 ## Capabilities
 
-[Open](#opening-a-pdf) · [merge](#merging-pdfs) · [split](#splitting-a-pdf) · [add](#adding-pages) / [remove](#removing-pages) / [extract](#extracting-pages)
-pages · [rotate](#rotating-pages) · [overlay & underlay](#overlays--underlays) · [encrypt / decrypt](#encryption--decryption) · [restrict permissions](#encryption--decryption) · [flatten · linearize](#flattening--linearization) · [read & write metadata](#inspecting-pdfs) · [page count](#inspecting-pdfs) · [dd / dump](#debugging-the-qpdf-command) · [save to disk](#save-to-disk) · [download](#download) · [stream](#stream-inline) · [raw content](#raw-content) · [conditional operations](#conditional-operations) · [macros](#extending-with-macros).
+| Category                  | Features                                                                                                                                                            |
+|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Getting started**       | [open](#opening-a-pdf) · [choose a disk](#choosing-a-disk) · [save](#save-to-disk) · [download](#download) · [stream](#stream-inline) · [raw content](#raw-content) |
+| **Page operations**       | [merge](#merging-pdfs) · [split](#splitting-a-pdf) · [add](#adding-pages) · [remove](#removing-pages) · [extract](#extracting-pages) · [rotate](#rotating-pages)    |
+| **Overlays & watermarks** | [overlay & underlay](#overlays--underlays)                                                                                                                          |
+| **Security**              | [encrypt / decrypt](#encryption--decryption) · [restrict permissions](#encryption--decryption)                                                                      |
+| **Metadata & inspection** | [read metadata](#reading-metadata) · [write metadata](#writing-metadata) · [page count](#reading-metadata)                                                          |
+| **Optimization**          | [flatten · linearize](#flattening--linearization)                                                                                                                   |
+| **Advanced**              | [conditional operations](#conditional-operations) · [macros](#extending-with-macros) · [debugging](#debugging-the-qpdf-command) · [error handling](#error-handling) |
 
-## Usage
+## Getting Started
 
-Use `open()` to manipulate an existing PDF, `merge()` to combine multiple files, or `inspect()` (a semantic alias for `open()`) for read-only operations like metadata and page count. All three return a fluent builder you can chain before saving or returning a response.
+Use `open()` to manipulate an existing PDF, or `merge()` to combine multiple files. Both return a fluent builder you can chain before saving or returning a response.
 
 ### Opening a PDF
 
@@ -104,6 +111,54 @@ Switch disks on the fly using `fromDisk()`:
 ```php
 Collate::fromDisk('s3')->open('reports/quarterly.pdf')->toDisk('local')->save('quarterly.pdf');
 ```
+
+### Save to Disk
+
+```php
+Collate::open('input.pdf')->save('output.pdf');
+```
+
+### Download
+
+Return a download response from a controller. The filename defaults to `document.pdf` when omitted:
+
+```php
+return Collate::open('invoice.pdf')
+    ->encrypt('client-password')
+    ->download('invoice-2024-001.pdf');
+```
+
+### Stream Inline
+
+Display the PDF inline in the browser. The filename defaults to `document.pdf` when omitted:
+
+```php
+return Collate::merge('cover.pdf', 'report.pdf')
+    ->linearize()
+    ->stream('quarterly-report.pdf');
+```
+
+### Raw Content
+
+Get the raw PDF binary contents as a string. Useful for APIs, email attachments, or custom storage:
+
+```php
+$content = Collate::open('document.pdf')->content();
+```
+
+### Returning from Controllers
+
+`PendingCollate` implements Laravel's `Responsable` interface, so you can return it directly from a controller. By
+default, the PDF is displayed in the browser:
+
+```php
+public function show()
+{
+    return Collate::open('invoice.pdf');
+}
+```
+
+## Page Operations
 
 ### Merging PDFs
 
@@ -181,6 +236,12 @@ Collate::open('document.pdf')
     ->save('selected-pages.pdf');
 ```
 
+> [!WARNING]
+> `onlyPages()` and `removePages()` are mutually exclusive and neither can be called more than once — calling both,
+> or calling either twice, on the same instance will throw a `BadMethodCallException`.
+
+### Page Range Syntax
+
 Anywhere a page range string is accepted (`onlyPages()`, `addPages()`, `removePages()`, `rotate()`), you can
 use [qpdf range syntax](https://qpdf.readthedocs.io/en/stable/cli.html#page-ranges):
 
@@ -191,10 +252,6 @@ use [qpdf range syntax](https://qpdf.readthedocs.io/en/stable/cli.html#page-rang
 | `1-3,7-9`  | Pages 1–3 and 7–9 |
 | `z`        | Last page         |
 | `1-z`      | All pages         |
-
-> [!WARNING]
-> `onlyPages()` and `removePages()` are mutually exclusive and neither can be called more than once — calling both,
-> or calling either twice, on the same instance will throw a `BadMethodCallException`.
 
 ### Splitting a PDF
 
@@ -236,7 +293,7 @@ Collate::open('scanned.pdf')
     ->save('fixed.pdf');
 ```
 
-### Overlays & Underlays
+## Overlays & Underlays
 
 Add watermarks, letterheads, or backgrounds. Both methods accept a disk path or an `UploadedFile` instance:
 
@@ -252,7 +309,7 @@ Collate::open('content.pdf')
     ->save('branded.pdf');
 ```
 
-### Encryption & Decryption
+## Encryption & Decryption
 
 Encrypt a document with a password:
 
@@ -268,8 +325,8 @@ be called after `encrypt()`:
 ```php
 Collate::open('confidential.pdf')
     ->encrypt(
-        userPassword: 'read-only',
-        ownerPassword: 'full-access',
+        userPassword: '[REDACTED:password]',
+        ownerPassword: '[REDACTED:password]',
         bitLength: 256,
     )
     ->restrict('print', 'extract')
@@ -306,19 +363,11 @@ Collate::open('locked.pdf')
     ->save('re-encrypted.pdf');
 ```
 
-### Flattening & Linearization
+## Metadata & Inspection
 
-Flatten form fields and annotations into the page content, or optimize a PDF for fast web viewing:
+### Reading Metadata
 
-```php
-Collate::open('form-filled.pdf')->flatten()->save('flattened.pdf');
-
-Collate::open('large-report.pdf')->linearize()->save('web-optimized.pdf');
-```
-
-### Inspecting PDFs
-
-Use `inspect()` for read-only operations like reading metadata or counting pages:
+Use `inspect()` (a semantic alias for `open()`) for read-only operations like reading metadata or counting pages:
 
 ```php
 $meta = Collate::inspect('document.pdf')->metadata();
@@ -335,6 +384,16 @@ $meta->modDate;
 $count = Collate::inspect('document.pdf')->pageCount();
 ```
 
+`pageCount()` and `metadata()` are also available on the builder if you need them mid-chain, even after a `merge()`:
+
+```php
+Collate::merge('doc1.pdf', 'doc2.pdf')
+    ->when(fn ($pdf) => $pdf->pageCount() > 10, fn ($pdf) => $pdf->rotate(90))
+    ->save('merged.pdf');
+```
+
+### Writing Metadata
+
 Set metadata on the output document:
 
 ```php
@@ -350,101 +409,19 @@ $meta = Collate::inspect('source.pdf')->metadata();
 Collate::open('target.pdf')->withMetadata($meta, author: 'New Author')->save('output.pdf');
 ```
 
-`pageCount()` and `metadata()` are also available on the builder if you need them mid-chain, even after a `merge()`:
+## Flattening & Linearization
+
+Flatten form fields and annotations into the page content, or optimize a PDF for fast web viewing:
 
 ```php
-Collate::merge('doc1.pdf', 'doc2.pdf')
-    ->when(fn ($pdf) => $pdf->pageCount() > 10, fn ($pdf) => $pdf->rotate(90))
-    ->save('merged.pdf');
+Collate::open('form-filled.pdf')->flatten()->save('flattened.pdf');
+
+Collate::open('large-report.pdf')->linearize()->save('web-optimized.pdf');
 ```
 
-### Debugging the qpdf Command
+## Advanced
 
-Use `dump()` and `dd()` to inspect the underlying qpdf command that Collate builds, without executing it:
-
-```php
-Collate::open('document.pdf')
-    ->rotate(90)
-    ->encrypt('secret')
-    ->dump();  // dumps the command and continues the chain
-
-Collate::open('document.pdf')
-    ->overlay('watermark.pdf')
-    ->dd();    // dumps the command and stops execution
-```
-
-> [!WARNING]
-> The output may contain sensitive data such as file paths and passwords.
-
-## Saving & Responses
-
-### Save to Disk
-
-```php
-Collate::open('input.pdf')->save('output.pdf');
-```
-
-### Download
-
-Return a download response from a controller. The filename defaults to `document.pdf` when omitted:
-
-```php
-return Collate::open('invoice.pdf')
-    ->encrypt('client-password')
-    ->download('invoice-2024-001.pdf');
-```
-
-### Stream Inline
-
-Display the PDF inline in the browser. The filename defaults to `document.pdf` when omitted:
-
-```php
-return Collate::merge('cover.pdf', 'report.pdf')
-    ->linearize()
-    ->stream('quarterly-report.pdf');
-```
-
-### Raw Content
-
-Get the raw PDF binary contents as a string. Useful for APIs, email attachments, or custom storage:
-
-```php
-$content = Collate::open('document.pdf')->content();
-```
-
-### Returning from Controllers
-
-`PendingCollate` implements Laravel's `Responsable` interface, so you can return it directly from a controller. By
-default, the PDF is displayed in the browser:
-
-```php
-public function show()
-{
-    return Collate::open('invoice.pdf');
-}
-```
-
-## Error Handling
-
-All exceptions thrown by Collate extend `Johind\Collate\Exceptions\CollateException`, which itself extends PHP's
-`RuntimeException`.
-
-When a `qpdf` command fails, a `Johind\Collate\Exceptions\ProcessFailedException` is thrown, exposing the `exitCode`
-and `errorOutput` from the underlying process. Invalid arguments (bad page ranges, unsupported rotation degrees, etc.)
-throw standard `InvalidArgumentException` or `BadMethodCallException` instances.
-
-```php
-use Johind\Collate\Exceptions\ProcessFailedException;
-
-try {
-    Collate::open('corrupted.pdf')->save('output.pdf');
-} catch (ProcessFailedException $e) {
-    $e->exitCode;    // qpdf exit code
-    $e->errorOutput; // stderr from qpdf
-}
-```
-
-## Conditional Operations
+### Conditional Operations
 
 `PendingCollate` uses the `Conditionable` trait, so you can conditionally apply operations:
 
@@ -455,7 +432,7 @@ Collate::open('document.pdf')
     ->save('output.pdf');
 ```
 
-## Extending with Macros
+### Extending with Macros
 
 Register macros on `PendingCollate` to add chainable operations:
 
@@ -481,16 +458,51 @@ Collate::macro('openInvoice', function (int $invoiceId) {
 Collate::openInvoice(2024001)->download();
 ```
 
+### Debugging the qpdf Command
+
+Use `dump()` and `dd()` to inspect the underlying qpdf command that Collate builds, without executing it:
+
+```php
+Collate::open('document.pdf')
+    ->rotate(90)
+    ->encrypt('secret')
+    ->dump();  // dumps the command and continues the chain
+
+Collate::open('document.pdf')
+    ->overlay('watermark.pdf')
+    ->dd();    // dumps the command and stops execution
+```
+
+> [!WARNING]
+> The output may contain sensitive data such as file paths and passwords.
+
+### Error Handling
+
+All exceptions thrown by Collate extend `Johind\Collate\Exceptions\CollateException`, which itself extends PHP's
+`RuntimeException`.
+
+When a `qpdf` command fails, a `Johind\Collate\Exceptions\ProcessFailedException` is thrown, exposing the `exitCode`
+and `errorOutput` from the underlying process. Invalid arguments (bad page ranges, unsupported rotation degrees, etc.)
+throw standard `InvalidArgumentException` or `BadMethodCallException` instances.
+
+```php
+use Johind\Collate\Exceptions\ProcessFailedException;
+
+try {
+    Collate::open('corrupted.pdf')->save('output.pdf');
+} catch (ProcessFailedException $e) {
+    $e->exitCode;    // qpdf exit code
+    $e->errorOutput; // stderr from qpdf
+}
+```
+
 ## Changelog
 
 Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
 
 ## Contributing
 
-I appreciate your help in keeping Collate stable! I'm primarily looking for contributions that focus on fixing bugs,
-improving error handling, or performance. If you have an idea for a new feature, please open an issue to discuss it with
-me first, as I want to keep the package's scope focused. Please note that I do not provide monetary compensation for
-contributions.
+Thank you for your help in keeping Collate stable! I am primarily looking for contributions that focus on fixing bugs, improving error handling or enhancing performance. If you have an idea for a new feature, please open an issue to discuss it with me first, since I want to ensure that the scope of the package remains focused. Please note that I do not provide monetary compensation for contributions.
 
 ## Security
 
