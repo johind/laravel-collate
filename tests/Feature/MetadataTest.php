@@ -22,10 +22,10 @@ describe('pageCount()', function (): void {
         expect($count)->toBe(1);
     });
 
-    it('returns more than 1 for the multi-page fixture', function (): void {
+    it('returns 5 for the multi-page fixture', function (): void {
         $count = makeCollate()->inspect('multi.pdf')->pageCount();
 
-        expect($count)->toBeGreaterThan(1);
+        expect($count)->toBe(5);
     });
 
     it('correctly sums up page counts for merged documents', function (): void {
@@ -42,6 +42,52 @@ describe('pageCount()', function (): void {
             ->pageCount();
 
         expect($count)->toBe(2);
+    });
+
+    it('counts correctly with :odd modifier on onlyPages()', function (): void {
+        // multi.pdf has 5 pages, odd pages of 1-5 are 1,3,5 → 3 pages
+        $count = makeCollate()->open('multi.pdf')
+            ->onlyPages('1-z:odd')
+            ->pageCount();
+
+        expect($count)->toBe(3);
+    });
+
+    it('counts correctly with :even modifier on onlyPages()', function (): void {
+        // multi.pdf has 5 pages, even pages of 1-5 are 2,4 → 2 pages
+        $count = makeCollate()->open('multi.pdf')
+            ->onlyPages('1-z:even')
+            ->pageCount();
+
+        expect($count)->toBe(2);
+    });
+
+    it('counts correctly with :odd modifier on addPages()', function (): void {
+        // doc.pdf (1 page) + odd pages of multi.pdf 1-5 (1,3,5) → 4 pages
+        $count = makeCollate()->open('doc.pdf')
+            ->addPages('multi.pdf', '1-z:odd')
+            ->pageCount();
+
+        expect($count)->toBe(4);
+    });
+
+    it('counts correctly with removePages() exclusions', function (): void {
+        // multi.pdf has 5 pages, remove page 1 → 4 pages
+        $count = makeCollate()->open('multi.pdf')
+            ->removePages('1')
+            ->pageCount();
+
+        expect($count)->toBe(4);
+    });
+
+    it('counts correctly with :odd exclusions from removePages()', function (): void {
+        // multi.pdf has 5 pages, remove odd positions 1,3,5 → 0 pages.
+        // :odd applies to the resulting selection after exclusions are applied.
+        $count = makeCollate()->open('multi.pdf')
+            ->removePages('1-z:odd')
+            ->pageCount();
+
+        expect($count)->toBe(0);
     });
 
     it('memoizes the total page count across repeated calls', function (): void {

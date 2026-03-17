@@ -48,47 +48,46 @@ describe('removePages()', function (): void {
             ->toThrow(BadMethodCallException::class, 'Collate: cannot call removePages() when no source file is set.');
     });
 
-    it('produces correct keep ranges from an integer array', function (): void {
+    it('stores a single exclusion for an integer array', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages([3]);
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-2,4-z');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3');
     });
 
-    it('correctly removes the first page', function (): void {
+    it('stores an exclusion for the first page', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages([1]);
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('2-z');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1');
     });
 
-    it('handles multiple non-consecutive pages', function (): void {
+    it('stores multiple exclusions for non-consecutive pages', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages([1, 3, 5]);
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('2,4,6-z');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1,x3,x5');
     });
 
-    it('expands a hyphenated range string into keep ranges', function (): void {
+    it('stores a range exclusion for a hyphenated string', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('5-10');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-4,11-z');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x5-10');
     });
 
-    it('handles a mixed comma-and-hyphen string', function (): void {
+    it('stores mixed exclusions for a comma-and-hyphen string', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('1,3,5-8');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('2,4,9-z');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1,x3,x5-8');
     });
 
     it('trims whitespace from items in the input string', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('1, 3, 5-8');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('2,4,9-z');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1,x3,x5-8');
     });
 
-    it('handles consecutive pages producing a clean trailing range', function (): void {
-        // Removing 1-3 from a document should keep 4-z with no gaps
+    it('stores a range exclusion for consecutive pages', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('1-3');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('4-z');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1-3');
     });
 
     it('throws when called after onlyPages()', function (): void {
@@ -120,35 +119,77 @@ describe('removePages()', function (): void {
             ->toThrow(InvalidArgumentException::class);
     });
 
-    it('handles duplicate page numbers without producing duplicate keep ranges', function (): void {
+    it('handles duplicate page numbers in the exclusion', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages([3, 3]);
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-2,4-z');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3,x3');
     });
 
     it('handles "z" as the last page', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('z');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-11');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,xz');
     });
 
     it('handles "z" in ranges (e.g., "10-z")', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('10-z');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-9');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x10-z');
     });
 
     it('handles "z" in an array', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages(['1', 'z']);
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('2-11');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1,xz');
+    });
+
+    it('stores an :odd exclusion for a full range', function (): void {
+        $pending = makeCollate()->open('doc.pdf')->removePages('1-z:odd');
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1-z:odd');
+    });
+
+    it('stores an :even exclusion for a full range', function (): void {
+        $pending = makeCollate()->open('doc.pdf')->removePages('1-z:even');
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1-z:even');
+    });
+
+    it('stores an :odd exclusion for a partial range', function (): void {
+        $pending = makeCollate()->open('doc.pdf')->removePages('3-8:odd');
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3-8:odd');
+    });
+
+    it('stores an :even exclusion for a partial range', function (): void {
+        $pending = makeCollate()->open('doc.pdf')->removePages('3-8:even');
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3-8:even');
+    });
+
+    it('stores an :odd exclusion on a single page', function (): void {
+        $pending = makeCollate()->open('doc.pdf')->removePages('3:odd');
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3:odd');
+    });
+
+    it('stores an :even exclusion on a single page', function (): void {
+        $pending = makeCollate()->open('doc.pdf')->removePages('3:even');
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3:even');
+    });
+
+    it('combines plain and :odd exclusions', function (): void {
+        $pending = makeCollate()->open('doc.pdf')->removePages('1,4-8:odd');
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1,x4-8:odd');
     });
 });
 
 it('removePage() delegates correctly to removePages()', function (): void {
     $pending = makeCollate()->open('doc.pdf')->removePage(3);
 
-    expect(getProperty($pending, 'pageSelection'))->toBe('1-2,4-z');
+    expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3');
 });
 
 describe('addPage()', function (): void {

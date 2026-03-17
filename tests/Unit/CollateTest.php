@@ -59,7 +59,8 @@ describe('open()', function (): void {
     it('sets the source file on the builder', function (): void {
         $pending = makeCollate()->open('doc.pdf');
 
-        expect(getProperty($pending, 'source'))->not->toBeNull();
+        expect(getProperty($pending, 'source'))->toBeString()
+            ->and(str_ends_with(getProperty($pending, 'source'), 'doc.pdf'))->toBeTrue();
     });
 });
 
@@ -71,7 +72,8 @@ describe('inspect()', function (): void {
     it('sets the source file on the builder', function (): void {
         $pending = makeCollate()->inspect('doc.pdf');
 
-        expect(getProperty($pending, 'source'))->not->toBeNull();
+        expect(getProperty($pending, 'source'))->toBeString()
+            ->and(str_ends_with(getProperty($pending, 'source'), 'doc.pdf'))->toBeTrue();
     });
 });
 

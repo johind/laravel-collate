@@ -15,30 +15,42 @@ beforeEach(function (): void {
 });
 
 it('rotates pages correctly', function (): void {
-    // We can't easily verify the actual rotation of the PDF content here
-    // without a sophisticated PDF parser, but we can verify the command
-    // runs successfully and doesn't corrupt the file.
+    $original = Storage::get('input.pdf');
+
     makeCollate()->open('input.pdf')
         ->rotate(90)
         ->save('rotated.pdf');
 
-    expect(Storage::exists('rotated.pdf'))->toBeTrue();
+    $rotated = Storage::get('rotated.pdf');
+
+    expect(mb_substr($rotated, 0, 4))->toBe('%PDF')
+        ->and($rotated)->not->toBe($original);
 });
 
 it('overlays a PDF correctly', function (): void {
+    $original = Storage::get('input.pdf');
+
     makeCollate()->open('input.pdf')
         ->overlay('other.pdf')
         ->save('overlaid.pdf');
 
-    expect(Storage::exists('overlaid.pdf'))->toBeTrue();
+    $overlaid = Storage::get('overlaid.pdf');
+
+    expect(mb_substr($overlaid, 0, 4))->toBe('%PDF')
+        ->and($overlaid)->not->toBe($original);
 });
 
 it('underlays a PDF correctly', function (): void {
+    $original = Storage::get('input.pdf');
+
     makeCollate()->open('input.pdf')
         ->underlay('other.pdf')
         ->save('underlaid.pdf');
 
-    expect(Storage::exists('underlaid.pdf'))->toBeTrue();
+    $underlaid = Storage::get('underlaid.pdf');
+
+    expect(mb_substr($underlaid, 0, 4))->toBe('%PDF')
+        ->and($underlaid)->not->toBe($original);
 });
 
 it('linearizes the output PDF', function (): void {
@@ -46,23 +58,37 @@ it('linearizes the output PDF', function (): void {
         ->linearize()
         ->save('linearized.pdf');
 
-    expect(Storage::exists('linearized.pdf'))->toBeTrue();
+    $linearized = Storage::get('linearized.pdf');
+
+    expect(mb_substr($linearized, 0, 4))->toBe('%PDF')
+        ->and($linearized)->toContain('/Linearized');
 });
 
 it('flattens annotations and form fields', function (): void {
+    $original = Storage::get('input.pdf');
+
     makeCollate()->open('input.pdf')
         ->flatten()
         ->save('flattened.pdf');
 
-    expect(Storage::exists('flattened.pdf'))->toBeTrue();
+    $flattened = Storage::get('flattened.pdf');
+
+    expect(mb_substr($flattened, 0, 4))->toBe('%PDF')
+        ->and(mb_strlen($flattened))->toBeGreaterThan(0);
 });
 
 it('combines multiple manipulations', function (): void {
+    $original = Storage::get('input.pdf');
+
     makeCollate()->open('input.pdf')
         ->rotate(180)
         ->overlay('other.pdf')
         ->linearize()
         ->save('combined.pdf');
 
-    expect(Storage::exists('combined.pdf'))->toBeTrue();
+    $combined = Storage::get('combined.pdf');
+
+    expect(mb_substr($combined, 0, 4))->toBe('%PDF')
+        ->and($combined)->not->toBe($original)
+        ->and($combined)->toContain('/Linearized');
 });

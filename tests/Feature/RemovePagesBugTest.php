@@ -14,18 +14,16 @@ it('successfully removes the last page of a document', function (): void {
     Storage::put('single.pdf', file_get_contents($path));
 
     $pending = Collate::open('single.pdf')->removePage(1);
-    expect(getProperty($pending, 'pageSelection'))->toBe('');
+    expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1');
     expect($pending->pageCount())->toBe(0);
 
     $content = $pending->content();
     expect($content)->toBeString();
 
-    // Save to check if it's a valid (but empty) PDF
+    // qpdf produces a valid PDF with zero pages when all pages are excluded.
+    // The important part is that it does NOT throw a ProcessFailedException.
     Storage::put('empty.pdf', $content);
-    // qpdf actually refuses to create a truly empty PDF from a selection that results in 0 pages.
-    // It seems it just returns the original file or fails silently in a way that preserves the original.
-    // For this bug fix, the important part is that it DOES NOT THROW a ProcessFailedException.
-    expect(Collate::open('empty.pdf')->pageCount())->toBe(1);
+    expect(Collate::open('empty.pdf')->pageCount())->toBe(0);
 });
 
 it('successfully removes the last page of a multi-page document', function (): void {

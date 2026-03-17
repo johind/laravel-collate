@@ -35,13 +35,25 @@ describe('save()', function (): void {
             ->and(Storage::disk('local')->exists('output.pdf'))->toBeFalse();
     });
 
-    it('does not leave a temp file behind after saving', function (): void {
+    it('cleans up the temp file after the builder is destroyed', function (): void {
         $tempDir = sys_get_temp_dir().'/collate-tests';
-        $beforeCount = is_dir($tempDir) ? count(glob($tempDir.'/*.pdf')) : 0;
 
-        makeCollate()->open('input.pdf')->save('output.pdf');
+        if (! is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
 
-        $afterCount = is_dir($tempDir) ? count(glob($tempDir.'/*.pdf')) : 0;
+        $beforeCount = count(glob($tempDir.'/*.pdf'));
+
+        $pending = makeCollate()->open('input.pdf');
+        $pending->save('output.pdf');
+
+        $processedPath = getProperty($pending, 'processedPath');
+        expect($processedPath)->not->toBeNull()
+            ->and(file_exists($processedPath))->toBeTrue();
+
+        unset($pending);
+
+        $afterCount = count(glob($tempDir.'/*.pdf'));
 
         expect($afterCount)->toBe($beforeCount);
     });
@@ -172,7 +184,9 @@ describe('split()', function (): void {
     it('without {page} in the path, all entries point to the same destination', function (): void {
         $paths = makeCollate()->open('multi.pdf')->split('pages/page.pdf');
 
-        expect($paths->unique())->toHaveCount(1);
+        expect($paths->unique())->toHaveCount(1)
+            ->and(Storage::exists('pages/page.pdf'))->toBeTrue()
+            ->and(mb_substr(Storage::get('pages/page.pdf'), 0, 4))->toBe('%PDF');
     });
 
     it('respects page selection applied before splitting', function (): void {
@@ -201,12 +215,15 @@ describe('split()', function (): void {
     });
 
     it('successfully splits an encrypted document', function (): void {
+        $pageCount = makeCollate()->inspect('multi.pdf')->pageCount();
+
         $paths = makeCollate()->open('multi.pdf')
             ->encrypt('user', 'owner')
             ->split('split-enc/page-{page}.pdf');
 
-        expect($paths)->not->toBeEmpty();
-        $paths->each(fn ($path) => expect(Storage::exists($path))->toBeTrue());
+        expect($paths)->toHaveCount($pageCount);
+        $paths->each(fn ($path) => expect(Storage::exists($path))->toBeTrue()
+            ->and(mb_substr(Storage::get($path), 0, 4))->toBe('%PDF'));
     });
 });
 
@@ -214,15 +231,26 @@ describe('decrypt()', function (): void {
     it('successfully processes a password-protected document', function (): void {
         makeCollate()->open('encrypted.pdf')->decrypt('test')->save('decrypted.pdf');
 
-        expect(Storage::exists('decrypted.pdf'))->toBeTrue();
+        $decrypted = Storage::get('decrypted.pdf');
+
+        expect(mb_substr($decrypted, 0, 4))->toBe('%PDF');
+
+        // Verify the output can be opened without a password
+        $pageCount = makeCollate()->inspect('decrypted.pdf')->pageCount();
+        expect($pageCount)->toBeGreaterThan(0);
     });
 
     it('processes an encrypted source with additions', function (): void {
+        $originalPageCount = makeCollate()->open('encrypted.pdf')->decrypt('test')->pageCount();
+
         makeCollate()->open('encrypted.pdf')
             ->decrypt('test')
             ->addPages('input.pdf')
             ->save('merged.pdf');
 
-        expect(Storage::exists('merged.pdf'))->toBeTrue();
+        $mergedPageCount = makeCollate()->inspect('merged.pdf')->pageCount();
+
+        expect(mb_substr(Storage::get('merged.pdf'), 0, 4))->toBe('%PDF')
+            ->and($mergedPageCount)->toBe($originalPageCount + 1);
     });
 });
