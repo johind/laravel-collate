@@ -40,6 +40,36 @@ describe('onlyPages()', function (): void {
         expect(fn (): Johind\Collate\PendingCollate => makeCollate()->merge('doc.pdf')->onlyPages([1]))
             ->toThrow(BadMethodCallException::class, 'Collate: cannot call onlyPages() when no source file is set.');
     });
+
+    it('throws for non-numeric token like "x3"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('x3'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for empty segments from double comma "1,,3"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('1,,3'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for trailing comma "1-3,,"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('1-3,,'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for stacked modifiers "1-z:odd:even"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('1-z:odd:even'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for double dash "1--3"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('1--3'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for page zero in range "z-0"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('z-0'))
+            ->toThrow(InvalidArgumentException::class);
+    });
 });
 
 describe('removePages()', function (): void {
@@ -146,43 +176,43 @@ describe('removePages()', function (): void {
     it('stores an :odd exclusion for a full range', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('1-z:odd');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1-z:odd');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1,x3,x5,x7,x9,x11');
     });
 
     it('stores an :even exclusion for a full range', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('1-z:even');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1-z:even');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x2,x4,x6,x8,x10,x12');
     });
 
     it('stores an :odd exclusion for a partial range', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('3-8:odd');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3-8:odd');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3,x5,x7');
     });
 
     it('stores an :even exclusion for a partial range', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('3-8:even');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3-8:even');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x4,x6,x8');
     });
 
     it('stores an :odd exclusion on a single page', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('3:odd');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3:odd');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3');
     });
 
     it('stores an :even exclusion on a single page', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('3:even');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x3:even');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z');
     });
 
     it('combines plain and :odd exclusions', function (): void {
         $pending = makeCollate()->open('doc.pdf')->removePages('1,4-8:odd');
 
-        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1,x4-8:odd');
+        expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1,x5,x7');
     });
 });
 
@@ -213,5 +243,35 @@ describe('addPages()', function (): void {
         expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')
             ->addPages(['doc.pdf', 'doc.pdf'], range: '1-3')
         )->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for non-numeric token like "x3"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', 'x3'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for empty segments from double comma "1,,3"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1,,3'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for trailing comma "1-3,,"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1-3,,'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for stacked modifiers "1-z:odd:even"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1-z:odd:even'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for double dash "1--3"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1--3'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('throws for page zero in range "z-0"', function (): void {
+        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', 'z-0'))
+            ->toThrow(InvalidArgumentException::class);
     });
 });
