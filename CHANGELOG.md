@@ -2,6 +2,18 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.5.0 - 2026-03-17
+
+### Added
+- `removePages()` now supports positional `:odd`/`:even` modifiers (e.g., `removePages('1-z:odd')`).
+
+### Fixed
+- `removePages()` now correctly handles selections that result in zero pages without failing.
+
+### Documentation
+- Clarified advanced page range syntax.
+- Documented `withMetadata()` overrides when passing `PdfMetadata`, including title handling.
+
 ## 1.4.3 - 2026-03-16
 
 ### Added
