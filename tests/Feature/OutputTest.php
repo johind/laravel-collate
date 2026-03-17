@@ -36,14 +36,6 @@ describe('save()', function (): void {
     });
 
     it('cleans up the temp file after the builder is destroyed', function (): void {
-        $tempDir = sys_get_temp_dir().'/collate-tests';
-
-        if (! is_dir($tempDir)) {
-            mkdir($tempDir, 0755, true);
-        }
-
-        $beforeCount = count(glob($tempDir.'/*.pdf'));
-
         $pending = makeCollate()->open('input.pdf');
         $pending->save('output.pdf');
 
@@ -53,9 +45,17 @@ describe('save()', function (): void {
 
         unset($pending);
 
-        $afterCount = count(glob($tempDir.'/*.pdf'));
+        expect(file_exists($processedPath))->toBeFalse();
+    });
 
-        expect($afterCount)->toBe($beforeCount);
+    it('saves the expected page count when removing odd pages', function (): void {
+        makeCollate()->open('multi.pdf')
+            ->removePages('1-z:odd')
+            ->save('odd-removed.pdf');
+
+        $count = makeCollate()->open('odd-removed.pdf')->pageCount();
+
+        expect($count)->toBe(2);
     });
 });
 
@@ -195,6 +195,15 @@ describe('split()', function (): void {
             ->split('pages/page-{page}.pdf');
 
         expect($paths)->toHaveCount(1);
+    });
+
+    it('respects removePages() with odd exclusions before splitting', function (): void {
+        $paths = makeCollate()->open('multi.pdf')
+            ->removePages('1-z:odd')
+            ->split('pages/odd-removed-{page}.pdf');
+
+        expect($paths)->toHaveCount(2);
+        $paths->each(fn ($path) => expect(Storage::exists($path))->toBeTrue());
     });
 
     it('correctly splits a PDF with more than 10 pages', function (): void {

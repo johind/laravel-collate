@@ -81,13 +81,12 @@ describe('pageCount()', function (): void {
     });
 
     it('counts correctly with :odd exclusions from removePages()', function (): void {
-        // multi.pdf has 5 pages, remove odd positions 1,3,5 → 0 pages.
-        // :odd applies to the resulting selection after exclusions are applied.
+        // multi.pdf has 5 pages, remove odd-positioned pages (1,3,5) → keeps 2,4 → 2 pages.
         $count = makeCollate()->open('multi.pdf')
             ->removePages('1-z:odd')
             ->pageCount();
 
-        expect($count)->toBe(0);
+        expect($count)->toBe(2);
     });
 
     it('memoizes the total page count across repeated calls', function (): void {
