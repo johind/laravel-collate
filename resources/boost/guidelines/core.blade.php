@@ -4,7 +4,7 @@ Collate provides a fluent API for manipulating PDFs in Laravel, powered by qpdf.
 
 ### Requirements
 
-- PHP 8.4+, Laravel 11/12, qpdf v11.0.0+
+- PHP 8.4+, Laravel 11/12, qpdf v11.7.1+
 
 ### Entry Points
 

@@ -7,15 +7,14 @@
 
 Collate is a Laravel package that provides a fluent API for manipulating PDFs.
 
-It supports common operations including merging, splitting, extracting pages,
-watermarking, encryption, metadata editing, and web optimization, all powered
-by [qpdf](https://qpdf.readthedocs.io/).
+Powered by [qpdf](https://qpdf.readthedocs.io/), it supports common operations including merging, splitting, extracting
+pages, watermarking, encryption, editing metadata, and web optimisation.
 
 ## Requirements
 
 - PHP 8.4+
 - Laravel 11 or 12
-- [qpdf](https://qpdf.readthedocs.io/) v11.0.0 or higher installed on your system
+- [qpdf](https://qpdf.readthedocs.io/) v11.7.1 or higher installed on your system
 
 ## Installation
 
@@ -88,7 +87,8 @@ Collate::merge('cover.pdf', 'chapter-1.pdf', 'chapter-2.pdf')
 
 ## Getting Started
 
-Use `open()` to manipulate an existing PDF, or `merge()` to combine multiple files. Both return a fluent builder you can chain before saving or returning a response.
+Use `open()` to manipulate an existing PDF, or `merge()` to combine multiple files. Both return a fluent builder you can
+chain before saving or returning a response.
 
 ### Opening a PDF
 
@@ -199,7 +199,7 @@ Collate::open('report.pdf')
 ```
 
 > [!IMPORTANT]
-> The `range` parameter cannot be used when passing an array of files. 
+> The `range` parameter cannot be used when passing an array of files.
 > Chain multiple `addPages()` calls instead.
 
 ### Removing Pages
@@ -252,6 +252,8 @@ use [qpdf range syntax](https://qpdf.readthedocs.io/en/stable/cli.html#page-rang
 | `1-3,7-9`  | Pages 1–3 and 7–9 |
 | `z`        | Last page         |
 | `1-z`      | All pages         |
+| `1-z:odd`  | Odd pages only    |
+| `1-z:even` | Even pages only   |
 
 ### Splitting a PDF
 
@@ -265,10 +267,10 @@ $paths = Collate::open('multi-page.pdf')
 ```
 
 > [!IMPORTANT]
-> Always include `{page}` in your path. Without it, every page will be written 
+> Always include `{page}` in your path. Without it, every page will be written
 > to the same destination, with each one overwriting the last.
 
-All operations — page selection, rotation, overlays, etc. — are applied before splitting, so you can chain them freely:
+All operations (page selection, rotation, overlays, etc.) are applied before splitting, so you can chain them freely:
 
 ```php
 Collate::open('scanned.pdf')
@@ -404,10 +406,18 @@ Collate::open('document.pdf')
     )
     ->save('branded-report.pdf');
 
-// Also accepts a PdfMetadata instance — named parameters override its values
+// Also accepts a PdfMetadata instance (named parameters override its values)
 $meta = Collate::inspect('source.pdf')->metadata();
-Collate::open('target.pdf')->withMetadata($meta, author: 'New Author')->save('output.pdf');
+Collate::open('target.pdf')
+    ->withMetadata($meta, author: 'New Author')
+    ->withMetadata(title: 'Updated Title')
+    ->save('output.pdf');
 ```
+
+> [!NOTE]
+> When you pass a `PdfMetadata` instance, you can override any named fields in the
+> same call except `title`. To change the title, call `withMetadata()` again with
+> `title:` as shown above.
 
 ## Flattening & Linearization
 
@@ -502,7 +512,10 @@ Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed re
 
 ## Contributing
 
-Thank you for your help in keeping Collate stable! I am primarily looking for contributions that focus on fixing bugs, improving error handling or enhancing performance. If you have an idea for a new feature, please open an issue to discuss it with me first, since I want to ensure that the scope of the package remains focused. Please note that I do not provide monetary compensation for contributions.
+Thank you for your help in keeping Collate stable! I am primarily looking for contributions that focus on fixing bugs,
+improving error handling or enhancing performance. If you have an idea for a new feature, please open an issue to
+discuss it with me first, since I want to ensure that the scope of the package remains focused. Please note that I do
+not provide monetary compensation for contributions.
 
 ## Security
 
