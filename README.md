@@ -327,8 +327,8 @@ be called after `encrypt()`:
 ```php
 Collate::open('confidential.pdf')
     ->encrypt(
-        userPassword: '[REDACTED:password]',
-        ownerPassword: '[REDACTED:password]',
+        userPassword: 'secret',
+        ownerPassword: 'more-secret',
         bitLength: 256,
     )
     ->restrict('print', 'extract')
