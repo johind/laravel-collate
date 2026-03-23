@@ -1,11 +1,11 @@
-# Collate — PDF manipulation for Laravel
+# Collate: PDF Processing for Laravel
 
 [![Tests](https://github.com/johind/laravel-collate/actions/workflows/run-tests.yml/badge.svg)](https://github.com/johind/laravel-collate/actions/workflows/run-tests.yml)
 [![Packagist License](https://img.shields.io/badge/Licence-MIT-blue)](http://choosealicense.com/licenses/mit/)
 [![Latest Stable Version](https://img.shields.io/packagist/v/johind/collate?label=Stable)](https://packagist.org/packages/johind/collate)
 [![Total Downloads](https://img.shields.io/packagist/dt/johind/collate.svg?label=Downloads)](https://packagist.org/packages/johind/collate)
 
-Collate is a Laravel package that provides a fluent API for manipulating PDFs.
+Collate is a Laravel package that provides a fluent API for processing PDFs.
 
 Powered by [qpdf](https://qpdf.readthedocs.io/), it supports common operations including merging, splitting, extracting
 pages, watermarking, encryption, editing metadata, and web optimisation.
