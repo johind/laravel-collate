@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Johind\Collate\CollateFake;
 use Johind\Collate\PendingCollateFake;
+use PHPUnit\Framework\ExpectationFailedException;
 
 it('inspect() returns a PendingCollateFake', function (): void {
     $fake = new CollateFake;
@@ -51,6 +52,27 @@ it('split() returns correctly sized collection based on total pages', function (
         ->and($paths[5])->toBe('page-6.pdf');
 });
 
+it('exposes fake inspection helpers for new document state', function (): void {
+    $fake = new CollateFake;
+    $pending = $fake->open('doc.pdf')
+        ->encrypt('secret')
+        ->linearize()
+        ->flatten()
+        ->optimize()
+        ->withoutMetadata();
+
+    $size = $pending->pageSize();
+
+    expect($pending->hasPassword())->toBeTrue()
+        ->and($pending->isLinearized())->toBeTrue()
+        ->and($pending->isFlattened())->toBeTrue()
+        ->and($pending->isOptimized())->toBeTrue()
+        ->and($pending->hasStrippedMetadata())->toBeTrue()
+        ->and($pending->pdfVersion())->toBe('1.7')
+        ->and($size->width)->toBe(612.0)
+        ->and($size->height)->toBe(792.0);
+});
+
 describe('toDisk()', function (): void {
     it('exposes the output disk via outputDisk()', function (): void {
         $fake = new CollateFake;
@@ -76,12 +98,58 @@ describe('assertions', function (): void {
         $fake->assertSaved(null, fn ($p): bool => $p->sourcePath() === 'doc.pdf');
     });
 
+    it('fails when asserting a missing saved PDF', function (): void {
+        $fake = new CollateFake;
+
+        expect(fn () => $fake->assertSaved())
+            ->toThrow(ExpectationFailedException::class, 'Expected a PDF to be saved, but none was.');
+    });
+
+    it('fails when asserting the wrong saved path', function (): void {
+        $fake = new CollateFake;
+        $fake->open('doc.pdf')->save('output.pdf');
+
+        expect(fn () => $fake->assertSaved('wrong.pdf'))
+            ->toThrow(ExpectationFailedException::class, 'Expected a PDF to be saved to [wrong.pdf], but it was not.');
+    });
+
+    it('fails when no saved PDF matches the callback', function (): void {
+        $fake = new CollateFake;
+        $fake->open('doc.pdf')->save('output.pdf');
+
+        expect(fn () => $fake->assertSaved(null, fn (): bool => false))
+            ->toThrow(ExpectationFailedException::class, 'Expected a PDF to be saved matching the given callback, but none matched.');
+    });
+
     it('can assert that a PDF was downloaded', function (): void {
         $fake = new CollateFake;
         $fake->open('doc.pdf')->download('download.pdf');
 
         $fake->assertDownloaded('download.pdf');
         $fake->assertDownloaded(null, fn ($p): bool => $p->sourcePath() === 'doc.pdf');
+    });
+
+    it('fails when asserting a missing download', function (): void {
+        $fake = new CollateFake;
+
+        expect(fn () => $fake->assertDownloaded())
+            ->toThrow(ExpectationFailedException::class, 'Expected a PDF to be downloaded, but none was.');
+    });
+
+    it('fails when asserting the wrong downloaded filename', function (): void {
+        $fake = new CollateFake;
+        $fake->open('doc.pdf')->download('download.pdf');
+
+        expect(fn () => $fake->assertDownloaded('wrong.pdf'))
+            ->toThrow(ExpectationFailedException::class, 'Expected a PDF to be downloaded as [wrong.pdf], but it was not.');
+    });
+
+    it('fails when no downloaded PDF matches the callback', function (): void {
+        $fake = new CollateFake;
+        $fake->open('doc.pdf')->download('download.pdf');
+
+        expect(fn () => $fake->assertDownloaded(null, fn (): bool => false))
+            ->toThrow(ExpectationFailedException::class, 'Expected a PDF to be downloaded matching the given callback, but none matched.');
     });
 
     it('can assert that a PDF was streamed', function (): void {
@@ -92,6 +160,29 @@ describe('assertions', function (): void {
         $fake->assertStreamed(null, fn ($p): bool => $p->sourcePath() === 'doc.pdf');
     });
 
+    it('fails when asserting a missing stream', function (): void {
+        $fake = new CollateFake;
+
+        expect(fn () => $fake->assertStreamed())
+            ->toThrow(ExpectationFailedException::class, 'Expected a PDF to be streamed, but none was.');
+    });
+
+    it('fails when asserting the wrong streamed filename', function (): void {
+        $fake = new CollateFake;
+        $fake->open('doc.pdf')->stream('stream.pdf');
+
+        expect(fn () => $fake->assertStreamed('wrong.pdf'))
+            ->toThrow(ExpectationFailedException::class, 'Expected a PDF to be streamed as [wrong.pdf], but it was not.');
+    });
+
+    it('fails when no streamed PDF matches the callback', function (): void {
+        $fake = new CollateFake;
+        $fake->open('doc.pdf')->stream('stream.pdf');
+
+        expect(fn () => $fake->assertStreamed(null, fn (): bool => false))
+            ->toThrow(ExpectationFailedException::class, 'Expected a PDF to be streamed matching the given callback, but none matched.');
+    });
+
     it('can assert that nothing was saved, downloaded, or streamed', function (): void {
         $fake = new CollateFake;
 
@@ -100,10 +191,41 @@ describe('assertions', function (): void {
         $fake->assertNothingStreamed();
     });
 
+    it('fails when asserting nothing was saved after a save', function (): void {
+        $fake = new CollateFake;
+        $fake->open('doc.pdf')->save('output.pdf');
+
+        expect(fn () => $fake->assertNothingSaved())
+            ->toThrow(ExpectationFailedException::class, 'Expected no PDFs to be saved, but 1 were.');
+    });
+
+    it('fails when asserting nothing was downloaded after a download', function (): void {
+        $fake = new CollateFake;
+        $fake->open('doc.pdf')->download('download.pdf');
+
+        expect(fn () => $fake->assertNothingDownloaded())
+            ->toThrow(ExpectationFailedException::class, 'Expected no PDFs to be downloaded, but 1 were.');
+    });
+
+    it('fails when asserting nothing was streamed after a stream', function (): void {
+        $fake = new CollateFake;
+        $fake->open('doc.pdf')->stream('stream.pdf');
+
+        expect(fn () => $fake->assertNothingStreamed())
+            ->toThrow(ExpectationFailedException::class, 'Expected no PDFs to be streamed, but 1 were.');
+    });
+
     it('can assert that a PDF was split', function (): void {
         $fake = new CollateFake;
         $fake->open('doc.pdf')->split('page-{page}.pdf');
 
         $fake->assertSplit();
+    });
+
+    it('fails when asserting a missing split', function (): void {
+        $fake = new CollateFake;
+
+        expect(fn () => $fake->assertSplit())
+            ->toThrow(ExpectationFailedException::class, 'Expected a PDF to be split, but none was.');
     });
 });

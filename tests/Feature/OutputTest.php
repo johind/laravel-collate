@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -103,12 +102,6 @@ describe('memoization', function (): void {
 });
 
 describe('content()', function (): void {
-    it('returns a non-empty string', function (): void {
-        $content = makeCollate()->open('input.pdf')->content();
-
-        expect($content)->toBeString()->not->toBeEmpty();
-    });
-
     it('output starts with the PDF magic bytes', function (): void {
         $content = makeCollate()->open('input.pdf')->content();
 
@@ -157,18 +150,6 @@ describe('stream()', function (): void {
 });
 
 describe('split()', function (): void {
-    it('returns a Collection', function (): void {
-        $paths = makeCollate()->open('multi.pdf')->split('pages/page-{page}.pdf');
-
-        expect($paths)->toBeInstanceOf(Collection::class);
-    });
-
-    it('returns a non-empty collection', function (): void {
-        $paths = makeCollate()->open('multi.pdf')->split('pages/page-{page}.pdf');
-
-        expect($paths)->not->toBeEmpty();
-    });
-
     it('replaces the {page} placeholder with the correct page number', function (): void {
         $paths = makeCollate()->open('multi.pdf')->split('pages/page-{page}.pdf');
 
