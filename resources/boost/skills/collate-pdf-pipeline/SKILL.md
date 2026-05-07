@@ -18,7 +18,9 @@ Use this skill when building multi-step PDF processing workflows. For API refere
 1. **Chain, don't nest.** Every method on `PendingCollate` returns `$this` — build your pipeline in a single fluent chain.
 2. **Order matters for some operations.** `restrict()` must follow `encrypt()`. Page manipulations (`addPages`, `removePages`, `onlyPages`) are applied in call order.
 3. **`onlyPages()` and `removePages()` are mutually exclusive.** Pick one strategy per chain.
-4. **Use `merge()` for combining, `open()` for transforming.** Don't `open()` one file and `addPages()` for the rest if you're just combining — `merge()` is clearer.
+4. **`withoutMetadata()` and `withMetadata()` are mutually exclusive.** Use `withoutMetadata()` to strip all metadata, or `withMetadata()` to set specific fields — never both in the same chain.
+5. **`linearize()` takes precedence over object stream generation.** You can combine it with `optimize()`, but qpdf will use the structures required for linearized output.
+6. **Use `merge()` for combining, `open()` for transforming.** Don't `open()` one file and `addPages()` for the rest if you're just combining — `merge()` is clearer.
 
 ## Composition Patterns
 
@@ -264,6 +266,8 @@ $this->service->generateReport($order);
 Collate::assertSaved('reports/final.pdf', function (PendingCollateFake $pdf) {
     return $pdf->isEncrypted()
         && $pdf->isLinearized()
+        && $pdf->isOptimized()
+        && !$pdf->hasStrippedMetadata()
         && $pdf->outputDisk() === 's3'
         && count($pdf->additions()) === 3;
 });

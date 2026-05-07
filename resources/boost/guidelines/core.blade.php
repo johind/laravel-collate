@@ -42,13 +42,23 @@ All return a `PendingCollate` fluent builder.
 - `decrypt($password)` — decrypt a protected PDF.
 - `restrict(...$permissions)` — **must be called after `encrypt()`.** Valid: `print`, `modify`, `extract`, `annotate`, `assemble`, `print-highres`, `form`, `modify-other`.
 
+### Inspection
+
+- `metadata()` — returns `PdfMetadata` with: `title`, `author`, `subject`, `keywords`, `creator`, `producer`, `creationDate`, `modDate`.
+- `pageCount()` — get page count.
+- `isEncrypted()` — check if the PDF is encrypted.
+- `hasPassword()` — check if a password is required to open the PDF.
+- `isLinearized()` — check if the PDF is linearized.
+- `pdfVersion()` — get the PDF version string (e.g. `'1.7'`).
+- `pageSize($page)` — get underlying page-box dimensions as a `PageSize` instance (`width`, `height`, `widthInInches()`, `heightInInches()`, `widthInMillimeters()`, `heightInMillimeters()`).
+
 ### Other Operations
 
 - `flatten()` — flatten form fields/annotations.
 - `linearize()` — optimize for web viewing.
+- `optimize()` — reduce file size by removing redundant data. When combined with `linearize()`, qpdf linearization takes precedence over object stream generation.
 - `withMetadata(title:, author:, subject:, keywords:, creator:, producer:, creationDate:, modDate:)` — set metadata. First argument also accepts a `PdfMetadata` instance (named params override its values).
-- `metadata()` — returns `PdfMetadata` with: `title`, `author`, `subject`, `keywords`, `creator`, `producer`, `creationDate`, `modDate`.
-- `pageCount()` — get page count.
+- `withoutMetadata()` — strip all metadata from output. **Mutually exclusive with `withMetadata()`.**
 - `dump()` — dump the built qpdf command and continue the chain. **Output may contain sensitive data.**
 - `dd()` — dump the built qpdf command and stop execution. **Output may contain sensitive data.**
 
@@ -74,7 +84,7 @@ All return a `PendingCollate` fluent builder.
 - `assertStreamed($filename, $callback)`, `assertNothingStreamed()`
 - `assertSplit()`
 
-`PendingCollateFake` introspection for callbacks: `sourcePath()`, `selectedPages()`, `additions()`, `isEncrypted()`, `isLinearized()`, `isFlattened()`, `rotations()`, `outputDisk()`, `pageCount()` (returns 3 per file).
+`PendingCollateFake` introspection for callbacks: `sourcePath()`, `selectedPages()`, `additions()`, `isEncrypted()`, `hasPassword()`, `isLinearized()`, `isFlattened()`, `isOptimized()`, `hasStrippedMetadata()`, `rotations()`, `outputDisk()`, `pageCount()` (returns 3 per file), `pdfVersion()` (always `'1.7'`), `pageSize($page)` (always US Letter 612×792).
 
 ### Usage Examples
 

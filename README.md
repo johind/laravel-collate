@@ -1,11 +1,11 @@
-# Collate: PDF Processing for Laravel
+# Collate — PDF manipulation for Laravel
 
 [![Tests](https://github.com/johind/laravel-collate/actions/workflows/run-tests.yml/badge.svg)](https://github.com/johind/laravel-collate/actions/workflows/run-tests.yml)
 [![Packagist License](https://img.shields.io/badge/Licence-MIT-blue)](http://choosealicense.com/licenses/mit/)
 [![Latest Stable Version](https://img.shields.io/packagist/v/johind/collate?label=Stable)](https://packagist.org/packages/johind/collate)
 [![Total Downloads](https://img.shields.io/packagist/dt/johind/collate.svg?label=Downloads)](https://packagist.org/packages/johind/collate)
 
-Collate is a Laravel package that provides a fluent API for processing PDFs.
+Collate is a Laravel package that provides a fluent API for manipulating PDFs.
 
 Powered by [qpdf](https://qpdf.readthedocs.io/), it supports common operations including merging, splitting, extracting
 pages, watermarking, encryption, editing metadata, and web optimisation.
@@ -75,15 +75,15 @@ Collate::merge('cover.pdf', 'chapter-1.pdf', 'chapter-2.pdf')
 
 ## Capabilities
 
-| Category                  | Features                                                                                                                                                            |
-|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Getting started**       | [open](#opening-a-pdf) · [choose a disk](#choosing-a-disk) · [save](#save-to-disk) · [download](#download) · [stream](#stream-inline) · [raw content](#raw-content) |
-| **Page operations**       | [merge](#merging-pdfs) · [split](#splitting-a-pdf) · [add](#adding-pages) · [remove](#removing-pages) · [extract](#extracting-pages) · [rotate](#rotating-pages)    |
-| **Overlays & watermarks** | [overlay & underlay](#overlays--underlays)                                                                                                                          |
-| **Security**              | [encrypt / decrypt](#encryption--decryption) · [restrict permissions](#encryption--decryption)                                                                      |
-| **Metadata & inspection** | [read metadata](#reading-metadata) · [write metadata](#writing-metadata) · [page count](#reading-metadata)                                                          |
-| **Optimization**          | [flatten · linearize](#flattening--linearization)                                                                                                                   |
-| **Advanced**              | [conditional operations](#conditional-operations) · [macros](#extending-with-macros) · [debugging](#debugging-the-qpdf-command) · [error handling](#error-handling) |
+| Category                  | Features                                                                                                                                                                          |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Getting started**       | [open](#opening-a-pdf) · [choose a disk](#choosing-a-disk) · [save](#save-to-disk) · [download](#download) · [stream](#stream-inline) · [raw content](#raw-content)               |
+| **Page operations**       | [merge](#merging-pdfs) · [split](#splitting-a-pdf) · [add](#adding-pages) · [remove](#removing-pages) · [extract](#extracting-pages) · [rotate](#rotating-pages)                  |
+| **Overlays & watermarks** | [overlay & underlay](#overlays--underlays)                                                                                                                                        |
+| **Security**              | [encrypt / decrypt](#encryption--decryption) · [restrict permissions](#encryption--decryption)                                                                                    |
+| **Metadata & inspection** | [read metadata](#reading-metadata) · [write metadata](#writing-metadata) · [strip metadata](#stripping-metadata) · [inspect](#inspecting-a-pdf) · [page count](#reading-metadata) |
+| **Optimization**          | [flatten](#flattening) · [linearize](#linearization) · [optimize](#optimization)                                                                                                  |
+| **Advanced**              | [conditional operations](#conditional-operations) · [macros](#extending-with-macros) · [debugging](#debugging-the-qpdf-command) · [error handling](#error-handling)               |
 
 ## Getting Started
 
@@ -419,14 +419,84 @@ Collate::open('target.pdf')
 > same call except `title`. To change the title, call `withMetadata()` again with
 > `title:` as shown above.
 
-## Flattening & Linearization
+### Stripping Metadata
 
-Flatten form fields and annotations into the page content, or optimize a PDF for fast web viewing:
+Remove all metadata from the output document:
+
+```php
+Collate::open('document.pdf')
+    ->withoutMetadata()
+    ->save('clean.pdf');
+```
+
+> [!WARNING]
+> `withoutMetadata()` and `withMetadata()` are mutually exclusive. Calling both on the same instance
+> will throw a `BadMethodCallException`.
+
+### Inspecting a PDF
+
+Use `inspect()` to query properties of an existing document without modifying it:
+
+```php
+$pdf = Collate::inspect('document.pdf');
+
+$pdf->isEncrypted();  // true if the document is encrypted
+$pdf->hasPassword();  // true if a password is required to open the document
+$pdf->isLinearized(); // true if the document is linearized for fast web viewing
+$pdf->pdfVersion();   // e.g. '1.7', '2.0'
+$pdf->pageSize();     // PageSize { width: 612.0, height: 792.0 }
+$pdf->pageSize(3);    // dimensions of a specific page
+```
+
+`inspect()` is a semantic alias for `open()`. You can also call these methods mid-chain on any builder.
+
+`pageSize()` returns the underlying page box dimensions in PDF points, not a rotation-adjusted display size. The returned
+`PageSize` object includes conversion helpers:
+
+```php
+$size = Collate::inspect('document.pdf')->pageSize();
+
+$size->widthInInches();
+$size->heightInInches();
+$size->widthInMillimeters();
+$size->heightInMillimeters();
+```
+
+## Optimization
+
+### Flattening
+
+Flatten form fields and annotations into the page content:
 
 ```php
 Collate::open('form-filled.pdf')->flatten()->save('flattened.pdf');
+```
 
+### Linearization
+
+Optimize a PDF for fast web viewing (progressive loading):
+
+```php
 Collate::open('large-report.pdf')->linearize()->save('web-optimized.pdf');
+```
+
+### File Size Optimization
+
+Reduce file size by removing redundant data and optimizing internal structures:
+
+```php
+Collate::open('bloated.pdf')->optimize()->save('smaller.pdf');
+```
+
+When `optimize()` is combined with `linearize()`, qpdf's linearization requirements take precedence over object stream
+generation. Other optimization steps still apply.
+
+```php
+Collate::open('form-filled.pdf')
+    ->flatten()
+    ->optimize()
+    ->linearize()
+    ->save('optimized.pdf');
 ```
 
 ## Advanced

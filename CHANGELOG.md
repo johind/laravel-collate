@@ -2,6 +2,29 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.5.2 - 2026-05-07
+
+### Added
+- Extend `inspect()` semantic alias for `open()` with inspection methods:
+  `isEncrypted()`, `hasPassword()`, `isLinearized()`, `pdfVersion()`, and `pageSize()`.
+- `PageSize` value object for page dimensions with inch and millimeter conversion helpers. Dimensions are reported in PDF points, include `/UserUnit` scaling, resolve inherited `/MediaBox` and `/UserUnit` values, are not adjusted for `/Rotate`, and reject negative dimensions or non-positive user units.
+- `withoutMetadata()` to strip all metadata from the output document. It is mutually exclusive with `withMetadata()`, including when `withMetadata()` is called without values.
+- `optimize()` to reduce file size by removing redundant data, recompressing flate streams at level 9, and optimizing internal structures. When combined with `linearize()`, object stream generation is omitted because qpdf linearization takes precedence.
+- qpdf JSON reads are pinned to version 2 and memoized to keep inspection parsing stable while avoiding redundant shell commands in chained inspection calls.
+- `hasPassword()`, `isOptimized()`, `hasStrippedMetadata()`, `pdfVersion()`, and `pageSize()` on `PendingCollateFake` for testing.
+- Internal helpers for source validation and qpdf JSON patching: `requireSource()`, `readQpdfObjectsForUpdate()`, and `updatePdfFromJsonPatch()`.
+
+### Documentation
+- Documented inspection, optimization, and metadata stripping APIs in README.
+- Updated AI core guideline and PDF pipeline skill with new methods and introspection fields.
+
+### Tests
+- Added focused coverage for inspection edge cases, metadata stripping, qpdf JSON memoization, optimization flags, fake helpers, and PDF manipulation outputs.
+
+## 1.5.1 - 2026-03-19
+
+Add Support for Laravel 13.
+
 ## 1.5.0 - 2026-03-17
 
 ### Added
