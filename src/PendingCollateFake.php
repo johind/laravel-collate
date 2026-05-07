@@ -53,6 +53,14 @@ class PendingCollateFake extends PendingCollate
     }
 
     /**
+     * Whether the document requires a password.
+     */
+    public function hasPassword(): bool
+    {
+        return $this->encryption !== null;
+    }
+
+    /**
      * Whether linearization was requested.
      */
     public function isLinearized(): bool
@@ -66,6 +74,38 @@ class PendingCollateFake extends PendingCollate
     public function isFlattened(): bool
     {
         return $this->flatten;
+    }
+
+    /**
+     * Whether optimization was requested.
+     */
+    public function isOptimized(): bool
+    {
+        return $this->optimize;
+    }
+
+    /**
+     * Whether metadata stripping was requested.
+     */
+    public function hasStrippedMetadata(): bool
+    {
+        return $this->stripMetadata;
+    }
+
+    /**
+     * Return the PDF version string.
+     */
+    public function pdfVersion(): string
+    {
+        return '1.7';
+    }
+
+    /**
+     * Return fake page dimensions.
+     */
+    public function pageSize(int $page = 1): PageSize
+    {
+        return new PageSize(width: 612.0, height: 792.0);
     }
 
     /**

@@ -130,9 +130,31 @@ class PendingCollate implements Responsable
     protected array $filePageCountCache = [];
 
     /**
+     * Whether to strip all metadata from the output.
+     */
+    protected bool $stripMetadata = false;
+
+    /**
+     * Whether to apply optimization flags.
+     */
+    protected bool $optimize = false;
+
+    /**
+     * Whether metadata has been explicitly configured on the output.
+     */
+    protected bool $hasSetMetadata = false;
+
+    /**
      * Memoized total page count for the output document.
      */
     protected ?int $memoizedTotalPageCount = null;
+
+    /**
+     * Memoized qpdf JSON output for the source file.
+     *
+     * @var array<string, mixed>|null
+     */
+    protected ?array $qpdfJsonCache = null;
 
     /**
      * Path to the processed PDF file.
@@ -235,9 +257,7 @@ class PendingCollate implements Responsable
      */
     public function removePages(string|array $range): static
     {
-        $source = $this->source ?? throw new BadMethodCallException(
-            'Collate: cannot call removePages() when no source file is set. Use open() or inspect() first.'
-        );
+        $source = $this->requireSource('removePages');
 
         if ($this->pageSelection !== null) {
             throw new BadMethodCallException(
@@ -288,11 +308,7 @@ class PendingCollate implements Responsable
      */
     public function onlyPages(string|array $range): static
     {
-        if ($this->source === null) {
-            throw new BadMethodCallException(
-                'Collate: cannot call onlyPages() when no source file is set. Use open() or inspect() first.'
-            );
-        }
+        $this->requireSource('onlyPages');
 
         if ($this->pageSelection !== null) {
             throw new BadMethodCallException(
@@ -455,45 +471,19 @@ class PendingCollate implements Responsable
      */
     public function metadata(): PdfMetadata
     {
-        if ($this->source === null) {
-            throw new BadMethodCallException('Collate: cannot read metadata without a source file. Use open() or inspect() first.');
-        }
-
-        $command = [
-            $this->collate->binaryPath(),
-            '--json',
-        ];
-
-        if ($this->decryptPassword !== null) {
-            $command[] = '--password='.$this->decryptPassword;
-        }
-
-        $command[] = $this->source;
-
-        $result = Process::run($command);
-
-        if (! $result->successful()) {
-            throw new ProcessFailedException(
-                'Collate: failed to read PDF metadata — '.$result->errorOutput(),
-                $result->exitCode() ?? 1,
-                $result->errorOutput(),
-            );
-        }
-
-        $json = json_decode($result->output(), true);
-
-        if (! is_array($json) || ! is_array($json['qpdf'] ?? null) || ! is_array($json['qpdf'][1] ?? null)) {
-            throw new RuntimeException('Collate: failed to parse qpdf JSON output — unexpected structure.');
-        }
-
-        /** @var array<string, mixed> $qpdfObjects */
-        $qpdfObjects = $json['qpdf'][1];
+        $json = $this->getQpdfJson('metadata');
         $info = [];
+
+        /** @var array<int, mixed> $qpdf */
+        $qpdf = $json['qpdf'];
+        /** @var array<string, mixed> $qpdfObjects */
+        $qpdfObjects = $qpdf[1];
 
         // The info ref is stored as e.g. "6 0 R" in the trailer value.
         $trailerValue = is_array($qpdfObjects['trailer'] ?? null) && is_array($qpdfObjects['trailer']['value'] ?? null)
             ? $qpdfObjects['trailer']['value']
             : [];
+
         $infoRef = $trailerValue['/Info'] ?? null;
 
         // The object key is "obj:6 0 R" — we must prepend "obj:" to the ref.
@@ -519,6 +509,126 @@ class PendingCollate implements Responsable
     }
 
     /**
+     * Check if the source document is encrypted.
+     */
+    public function isEncrypted(): bool
+    {
+        return $this->inspectExitCode('isEncrypted', '--is-encrypted');
+    }
+
+    /**
+     * Check if the source document requires a password to open.
+     */
+    public function hasPassword(): bool
+    {
+        return $this->inspectExitCode('hasPassword', '--requires-password');
+    }
+
+    /**
+     * Check if the source document is linearized (optimized for fast web viewing).
+     */
+    public function isLinearized(): bool
+    {
+        $json = $this->getQpdfJson('isLinearized');
+
+        /** @var array<int, mixed> $qpdf */
+        $qpdf = $json['qpdf'];
+        /** @var array<string, mixed> $qpdfObjects */
+        $qpdfObjects = $qpdf[1];
+
+        foreach ($qpdfObjects as $object) {
+            $value = is_array($object) && is_array($object['value'] ?? null)
+                ? $object['value']
+                : null;
+
+            if (is_array($value) && array_key_exists('/Linearized', $value)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Return the PDF version string (e.g. "1.7", "2.0").
+     */
+    public function pdfVersion(): string
+    {
+        $json = $this->getQpdfJson('pdfVersion');
+
+        /** @var array<int, mixed> $qpdf */
+        $qpdf = $json['qpdf'];
+        $version = is_array($qpdf[0] ?? null) ? ($qpdf[0]['pdfversion'] ?? null) : null;
+
+        if (! is_string($version)) {
+            throw new RuntimeException('Collate: failed to read PDF version from qpdf JSON output.');
+        }
+
+        return $version;
+    }
+
+    /**
+     * Return the underlying page-box dimensions in PDF points.
+     *
+     * The returned size is based on the page's /MediaBox, including inherited
+     * page-tree values and /UserUnit scaling. It is not adjusted for /Rotate.
+     *
+     * @throws InvalidArgumentException When the requested page does not exist.
+     * @throws RuntimeException When qpdf JSON does not contain a valid /MediaBox.
+     */
+    public function pageSize(int $page = 1): PageSize
+    {
+        $json = $this->getQpdfJson('pageSize');
+
+        /** @var list<array{pageposfrom1: int, object: string}> $pages */
+        $pages = $json['pages'] ?? [];
+
+        $pageInfo = null;
+        foreach ($pages as $p) {
+            if ($p['pageposfrom1'] === $page) {
+                $pageInfo = $p;
+                break;
+            }
+        }
+
+        if ($pageInfo === null) {
+            throw new InvalidArgumentException(
+                sprintf('Collate: page %d does not exist in the document (document has %d pages).', $page, count($pages))
+            );
+        }
+
+        /** @var array<int, mixed> $qpdf */
+        $qpdf = $json['qpdf'];
+        /** @var array<string, mixed> $qpdfObjects */
+        $qpdfObjects = $qpdf[1];
+        $pageObject = $qpdfObjects['obj:'.$pageInfo['object']] ?? null;
+        /** @var array<string, mixed> $pageValues */
+        $pageValues = is_array($pageObject) && is_array($pageObject['value'] ?? null)
+            ? $pageObject['value']
+            : [];
+
+        /** @var list<float|int>|null $mediaBox */
+        $mediaBox = $this->pageTreeValue($qpdfObjects, $pageValues, '/MediaBox');
+
+        if (! is_array($mediaBox) || count($mediaBox) < 4) {
+            throw new RuntimeException(
+                sprintf('Collate: page %d does not have a valid /MediaBox.', $page)
+            );
+        }
+
+        $userUnitRaw = $this->pageTreeValue($qpdfObjects, $pageValues, '/UserUnit');
+        $userUnit = is_numeric($userUnitRaw)
+            ? (float) $userUnitRaw
+            : 1.0;
+
+        return new PageSize(
+            width: ((float) $mediaBox[2] - (float) $mediaBox[0]) * $userUnit,
+            height: ((float) $mediaBox[3] - (float) $mediaBox[1]) * $userUnit,
+            userUnit: $userUnit,
+        );
+    }
+
+    /**
      * Set metadata on the output document.
      *
      * Pass a PdfMetadata instance as the first argument to copy all its values.
@@ -535,6 +645,12 @@ class PendingCollate implements Responsable
         ?string $creationDate = null,
         ?string $modDate = null,
     ): static {
+        if ($this->stripMetadata) {
+            throw new BadMethodCallException(
+                'Collate: cannot call withMetadata() after withoutMetadata() has already been called.'
+            );
+        }
+
         $meta = $title instanceof PdfMetadata ? $title->toArray() : [];
 
         $map = [
@@ -548,13 +664,42 @@ class PendingCollate implements Responsable
             'ModDate' => $modDate ?? ($meta['ModDate'] ?? null),
         ];
 
-        $this->clearCache();
+        $this->clearProcessedFile();
+        $this->hasSetMetadata = true;
 
         foreach ($map as $key => $value) {
             if ($value !== null) {
                 $this->metadata[$key] = $value;
             }
         }
+
+        return $this;
+    }
+
+    /**
+     * Strip all metadata fields from the output document.
+     */
+    public function withoutMetadata(): static
+    {
+        if ($this->hasSetMetadata) {
+            throw new BadMethodCallException(
+                'Collate: cannot call withoutMetadata() after withMetadata() has already been called.'
+            );
+        }
+
+        $this->clearProcessedFile();
+        $this->stripMetadata = true;
+
+        return $this;
+    }
+
+    /**
+     * Apply optimization to reduce file size.
+     */
+    public function optimize(): static
+    {
+        $this->clearProcessedFile();
+        $this->optimize = true;
 
         return $this;
     }
@@ -1048,6 +1193,15 @@ class PendingCollate implements Responsable
                 }
             }
 
+            if ($this->stripMetadata) {
+                try {
+                    $this->removeMetadata($tempOutput);
+                } catch (Throwable $e) {
+                    @unlink($tempOutput);
+                    throw $e;
+                }
+            }
+
             if ($pageOverride === null) {
                 $this->processedPath = $tempOutput;
             }
@@ -1063,51 +1217,17 @@ class PendingCollate implements Responsable
      */
     protected function applyMetadata(string $file): void
     {
-        $jsonFile = $file.'.json';
-
         $infoFields = [];
         foreach ($this->metadata as $key => $value) {
             // qpdf JSON v2 encodes PDF strings with a "u:" prefix.
             $infoFields['/'.$key] = 'u:'.$value;
         }
 
-        $readCommand = [
-            $this->collate->binaryPath(),
-            '--json',
-        ];
+        ['qpdfObjects' => $qpdfObjects, 'trailerValue' => $trailerValue] = $this->readQpdfObjectsForUpdate(
+            $file,
+            'metadata update',
+        );
 
-        // When the output has been encrypted, qpdf needs the owner password
-        // to read the file back for the metadata update.
-        if ($this->encryption) {
-            $readCommand[] = '--password='.$this->encryption['owner_password'];
-        }
-
-        $readCommand[] = $file;
-
-        $readResult = Process::run($readCommand);
-
-        if (! $readResult->successful()) {
-            throw new ProcessFailedException(
-                'Collate: failed to read PDF for metadata update — '.$readResult->errorOutput(),
-                $readResult->exitCode() ?? 1,
-                $readResult->errorOutput(),
-            );
-        }
-
-        $existing = json_decode($readResult->output(), true);
-
-        if (! is_array($existing) || ! is_array($existing['qpdf'] ?? null) || ! is_array($existing['qpdf'][1] ?? null)) {
-            throw new RuntimeException('Collate: failed to parse qpdf JSON output for metadata update — unexpected structure.');
-        }
-
-        /** @var array<string, mixed> $qpdfObjects */
-        $qpdfObjects = $existing['qpdf'][1];
-
-        // The info ref is stored as e.g. "6 0 R" in the trailer value.
-        // The corresponding object key is "obj:6 0 R".
-        $trailerValue = is_array($qpdfObjects['trailer'] ?? null) && is_array($qpdfObjects['trailer']['value'] ?? null)
-            ? $qpdfObjects['trailer']['value']
-            : [];
         $infoRef = $trailerValue['/Info'] ?? null;
 
         $patch = [];
@@ -1137,12 +1257,127 @@ class PendingCollate implements Responsable
 
             $patch[$newRef] = ['value' => $infoFields];
 
-            // Update only the /Info key on the trailer — qpdf merges the rest.
-            $patch['trailer'] = ['value' => ['/Info' => $trailerRef]];
+            // Include the full trailer so qpdf can locate /Root when the
+            // info dictionary was previously stripped from the file.
+            $trailerValue['/Info'] = $trailerRef;
+            $patch['trailer'] = ['value' => $trailerValue];
         }
 
-        // The second element of the qpdf array is a flat object whose keys
-        // are either "trailer" or "obj:n n R". No wrapper key is used.
+        $this->updatePdfFromJsonPatch($file, $patch, 'set metadata');
+    }
+
+    /**
+     * Remove all metadata fields from a PDF via qpdf's update-from-json.
+     */
+    protected function removeMetadata(string $file): void
+    {
+        ['qpdfObjects' => $qpdfObjects, 'trailerValue' => $trailerValue] = $this->readQpdfObjectsForUpdate(
+            $file,
+            'metadata removal',
+        );
+
+        $patch = [];
+        $infoRef = $trailerValue['/Info'] ?? null;
+
+        if (is_string($infoRef)) {
+            unset($trailerValue['/Info']);
+            $patch['trailer'] = ['value' => $trailerValue];
+        }
+
+        foreach ($qpdfObjects as $objectKey => $object) {
+            if ($objectKey === 'trailer') {
+                continue;
+            }
+
+            // Stream objects expose metadata inside stream dictionaries, not
+            // scalar value entries, so non-dictionary values can be skipped.
+            $value = is_array($object) && is_array($object['value'] ?? null)
+                ? $object['value']
+                : null;
+            if ($value === null) {
+                continue;
+            }
+
+            if (! array_key_exists('/Metadata', $value)) {
+                continue;
+            }
+
+            unset($value['/Metadata']);
+            $patch[$objectKey] = ['value' => $value];
+        }
+
+        if ($patch === []) {
+            return;
+        }
+
+        $this->updatePdfFromJsonPatch($file, $patch, 'remove metadata');
+    }
+
+    /**
+     * Read qpdf objects and trailer values from an existing PDF for in-place updates.
+     *
+     * @return array{qpdfObjects: array<string, mixed>, trailerValue: array<string, mixed>}
+     */
+    protected function readQpdfObjectsForUpdate(string $file, string $action): array
+    {
+        $readCommand = [
+            $this->collate->binaryPath(),
+            '--json=2',
+        ];
+
+        // When the output has been encrypted, qpdf needs the owner password
+        // to read the file back for subsequent JSON-based updates.
+        if ($this->encryption) {
+            $readCommand[] = '--password='.$this->encryption['owner_password'];
+        }
+
+        $readCommand[] = $file;
+
+        $readResult = Process::run($readCommand);
+
+        if (! $readResult->successful()) {
+            throw new ProcessFailedException(
+                sprintf('Collate: failed to read PDF for %s — %s', $action, $readResult->errorOutput()),
+                $readResult->exitCode() ?? 1,
+                $readResult->errorOutput(),
+            );
+        }
+
+        $existing = json_decode($readResult->output(), true);
+
+        if (! is_array($existing) || ! is_array($existing['qpdf'] ?? null) || ! is_array($existing['qpdf'][1] ?? null)) {
+            throw new RuntimeException(
+                sprintf('Collate: failed to parse qpdf JSON output for %s — unexpected structure.', $action)
+            );
+        }
+
+        /** @var array<int, mixed> $qpdf */
+        $qpdf = $existing['qpdf'];
+        /** @var array<string, mixed> $qpdfObjects */
+        $qpdfObjects = $qpdf[1];
+
+        $trailerValue = is_array($qpdfObjects['trailer'] ?? null) && is_array($qpdfObjects['trailer']['value'] ?? null)
+            ? $qpdfObjects['trailer']['value']
+            : [];
+
+        /** @var array{qpdfObjects: array<string, mixed>, trailerValue: array<string, mixed>} $result */
+        $result = [
+            'qpdfObjects' => $qpdfObjects,
+            'trailerValue' => $trailerValue,
+        ];
+
+        return $result;
+    }
+
+    /**
+     * Apply a qpdf JSON patch to an existing PDF in place.
+     *
+     * @param  array<string, mixed>  $patch
+     */
+    protected function updatePdfFromJsonPatch(string $file, array $patch, string $action): void
+    {
+        $jsonFile = $file.'.json';
+
         $json = json_encode([
             'qpdf' => [
                 ['jsonversion' => 2, 'pushedinheritedpageresources' => false],
@@ -1150,7 +1385,13 @@ class PendingCollate implements Responsable
             ],
         ]);
 
-        file_put_contents($jsonFile, $json);
+        if (! is_string($json)) {
+            throw new RuntimeException(sprintf('Collate: failed to encode qpdf JSON patch for %s.', $action));
+        }
+
+        if (file_put_contents($jsonFile, $json) === false) {
+            throw new RuntimeException(sprintf('Collate: failed to write temporary JSON patch for %s.', $action));
+        }
 
         $updateCommand = [
             $this->collate->binaryPath(),
@@ -1170,11 +1411,125 @@ class PendingCollate implements Responsable
 
         if (! $result->successful()) {
             throw new ProcessFailedException(
-                'Collate: failed to set metadata — '.$result->errorOutput(),
+                sprintf('Collate: failed to %s — %s', $action, $result->errorOutput()),
                 $result->exitCode() ?? 1,
                 $result->errorOutput(),
             );
         }
+    }
+
+    /**
+     * Get an inheritable page-tree value from a page or its ancestor pages nodes.
+     *
+     * Returns the raw value as decoded from qpdf JSON. Callers are responsible
+     * for validating and normalizing the shape and scalar types they expect.
+     *
+     * @param  array<string, mixed>  $qpdfObjects
+     * @param  array<string, mixed>  $pageValues
+     */
+    protected function pageTreeValue(array $qpdfObjects, array $pageValues, string $key): mixed
+    {
+        if (array_key_exists($key, $pageValues)) {
+            return $pageValues[$key];
+        }
+
+        $visited = [];
+        $parentRef = $pageValues['/Parent'] ?? null;
+
+        while (is_string($parentRef) && ! isset($visited[$parentRef])) {
+            $visited[$parentRef] = true;
+
+            $parentObject = $qpdfObjects['obj:'.$parentRef] ?? null;
+            $parentValues = is_array($parentObject) && is_array($parentObject['value'] ?? null)
+                ? $parentObject['value']
+                : [];
+
+            if (array_key_exists($key, $parentValues)) {
+                return $parentValues[$key];
+            }
+
+            $parentRef = $parentValues['/Parent'] ?? null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Run a qpdf exit-code inspection command (exit 0 = true, exit 2 = false).
+     */
+    protected function inspectExitCode(string $method, string $flag): bool
+    {
+        $source = $this->requireSource($method);
+
+        $result = Process::run([
+            $this->collate->binaryPath(),
+            $flag,
+            $source,
+        ]);
+
+        return match ($result->exitCode()) {
+            0 => true,
+            2 => false,
+            default => throw new ProcessFailedException(
+                sprintf('Collate: failed to inspect PDF — %s', $result->errorOutput()),
+                $result->exitCode() ?? 1,
+                $result->errorOutput(),
+            ),
+        };
+    }
+
+    /**
+     * Get the full qpdf JSON output for the source file, memoized.
+     *
+     * @return array<string, mixed>
+     */
+    protected function getQpdfJson(string $caller = 'inspect'): array
+    {
+        $this->requireSource($caller);
+
+        if ($this->qpdfJsonCache !== null) {
+            return $this->qpdfJsonCache;
+        }
+
+        $command = [
+            $this->collate->binaryPath(),
+            '--json=2',
+        ];
+
+        if ($this->decryptPassword !== null) {
+            $command[] = '--password='.$this->decryptPassword;
+        }
+
+        $command[] = $this->source;
+
+        $result = Process::run($command);
+
+        if (! $result->successful()) {
+            throw new ProcessFailedException(
+                'Collate: failed to read PDF — '.$result->errorOutput(),
+                $result->exitCode() ?? 1,
+                $result->errorOutput(),
+            );
+        }
+
+        $json = json_decode($result->output(), true);
+
+        if (! is_array($json) || ! is_array($json['qpdf'] ?? null) || ! is_array($json['qpdf'][1] ?? null)) {
+            throw new RuntimeException('Collate: failed to parse qpdf JSON output — unexpected structure.');
+        }
+
+        /** @var array<string, mixed> $json */
+        return $this->qpdfJsonCache = $json;
+    }
+
+    /**
+     * Ensure a source file is set, or throw.
+     */
+    protected function requireSource(string $method): string
+    {
+        return $this->source ?? throw new BadMethodCallException(
+            sprintf('Collate: cannot call %s() when no source file is set. Use open() or inspect() first.', $method)
+        );
     }
 
     /**
@@ -1268,6 +1623,17 @@ class PendingCollate implements Responsable
             $command[] = '--flatten-annotations=all';
         }
 
+        // Optimize
+        if ($this->optimize) {
+            if (! $this->linearize) {
+                $command[] = '--object-streams=generate';
+            }
+
+            $command[] = '--remove-unreferenced-resources=yes';
+            $command[] = '--recompress-flate';
+            $command[] = '--compression-level=9';
+        }
+
         // Linearize
         if ($this->linearize) {
             $command[] = '--linearize';
@@ -1335,6 +1701,15 @@ class PendingCollate implements Responsable
     protected function clearCache(): void
     {
         $this->memoizedTotalPageCount = null;
+        $this->qpdfJsonCache = null;
+        $this->clearProcessedFile();
+    }
+
+    /**
+     * Clear only the memoized processed output path.
+     */
+    protected function clearProcessedFile(): void
+    {
         $this->cleanupProcessedFile();
     }
 
