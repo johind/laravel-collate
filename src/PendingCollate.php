@@ -157,6 +157,18 @@ class PendingCollate implements Responsable
     protected ?array $qpdfJsonCache = null;
 
     /**
+     * Cache of whether a file contains document-level named destinations.
+     *
+     * @var array<string, bool>
+     */
+    protected array $namedDestinationCache = [];
+
+    /**
+     * Addition index to use as qpdf's primary document input for catalog data.
+     */
+    protected ?int $documentDataPrimaryAddition = null;
+
+    /**
      * Path to the processed PDF file.
      */
     protected ?string $processedPath = null;
@@ -1170,6 +1182,7 @@ class PendingCollate implements Responsable
         }
 
         $tempOutput = $this->tempFilePath();
+        $this->selectDocumentDataPrimary();
         $command = $this->buildCommand($tempOutput, $pageOverride);
 
         try {
@@ -1320,36 +1333,9 @@ class PendingCollate implements Responsable
      */
     protected function readQpdfObjectsForUpdate(string $file, string $action): array
     {
-        $readCommand = [
-            $this->collate->binaryPath(),
-            '--json=2',
-        ];
-
         // When the output has been encrypted, qpdf needs the owner password
         // to read the file back for subsequent JSON-based updates.
-        if ($this->encryption) {
-            $readCommand[] = '--password='.$this->encryption['owner_password'];
-        }
-
-        $readCommand[] = $file;
-
-        $readResult = Process::run($readCommand);
-
-        if (! $readResult->successful()) {
-            throw new ProcessFailedException(
-                sprintf('Collate: failed to read PDF for %s — %s', $action, $readResult->errorOutput()),
-                $readResult->exitCode() ?? 1,
-                $readResult->errorOutput(),
-            );
-        }
-
-        $existing = json_decode($readResult->output(), true);
-
-        if (! is_array($existing) || ! is_array($existing['qpdf'] ?? null) || ! is_array($existing['qpdf'][1] ?? null)) {
-            throw new RuntimeException(
-                sprintf('Collate: failed to parse qpdf JSON output for %s — unexpected structure.', $action)
-            );
-        }
+        $existing = $this->readQpdfJsonFile($file, $action, $this->encryption['owner_password'] ?? null);
 
         /** @var array<int, mixed> $qpdf */
         $qpdf = $existing['qpdf'];
@@ -1485,28 +1471,108 @@ class PendingCollate implements Responsable
      */
     protected function getQpdfJson(string $caller = 'inspect'): array
     {
-        $this->requireSource($caller);
+        $source = $this->requireSource($caller);
 
         if ($this->qpdfJsonCache !== null) {
             return $this->qpdfJsonCache;
         }
 
+        $json = $this->readQpdfJsonFile($source, 'read PDF', $this->decryptPassword);
+
+        /** @var array<string, mixed> $json */
+        return $this->qpdfJsonCache = $json;
+    }
+
+    /**
+     * Prefer an input that carries named destinations as qpdf's primary input.
+     *
+     * Link annotations live on pages and are copied by --pages, but internal
+     * GoTo actions generated from HTML anchors often point at names stored in
+     * the catalog's /Names /Dests tree. qpdf preserves that document-level
+     * tree only from the primary input file, so using --empty or a plain cover
+     * page as the primary input can leave the clickable annotations pointing
+     * at destinations that no longer exist.
+     */
+    protected function selectDocumentDataPrimary(): void
+    {
+        $this->documentDataPrimaryAddition = null;
+
+        if ($this->additions === []) {
+            return;
+        }
+
+        if ($this->source !== null && $this->decryptPassword !== null) {
+            return;
+        }
+
+        if ($this->source !== null && $this->hasNamedDestinations($this->source)) {
+            return;
+        }
+
+        foreach ($this->additions as $index => $addition) {
+            if ($this->hasNamedDestinations($addition['file'])) {
+                $this->documentDataPrimaryAddition = $index;
+
+                return;
+            }
+        }
+    }
+
+    /**
+     * Determine whether a PDF catalog contains a named destination tree.
+     */
+    protected function hasNamedDestinations(string $file): bool
+    {
+        if (array_key_exists($file, $this->namedDestinationCache)) {
+            return $this->namedDestinationCache[$file];
+        }
+
+        $password = $this->decryptPassword !== null && $file === $this->source
+            ? $this->decryptPassword
+            : null;
+        $json = $this->readQpdfJsonFile($file, 'named destination inspection', $password);
+
+        /** @var array<int, mixed> $qpdf */
+        $qpdf = $json['qpdf'];
+        /** @var array<string, mixed> $qpdfObjects */
+        $qpdfObjects = $qpdf[1];
+
+        $trailerValue = is_array($qpdfObjects['trailer'] ?? null) && is_array($qpdfObjects['trailer']['value'] ?? null)
+            ? $qpdfObjects['trailer']['value']
+            : [];
+        $rootRef = $trailerValue['/Root'] ?? null;
+        $catalogObject = is_string($rootRef) ? ($qpdfObjects['obj:'.$rootRef] ?? null) : null;
+        /** @var array<string, mixed> $catalogValue */
+        $catalogValue = is_array($catalogObject) && is_array($catalogObject['value'] ?? null)
+            ? $catalogObject['value']
+            : [];
+
+        return $this->namedDestinationCache[$file] = $this->catalogHasNamedDestinations($qpdfObjects, $catalogValue);
+    }
+
+    /**
+     * Read qpdf JSON for any PDF file.
+     *
+     * @return array<string, mixed>
+     */
+    protected function readQpdfJsonFile(string $file, string $action, ?string $password = null): array
+    {
         $command = [
             $this->collate->binaryPath(),
             '--json=2',
         ];
 
-        if ($this->decryptPassword !== null) {
-            $command[] = '--password='.$this->decryptPassword;
+        if ($password !== null) {
+            $command[] = '--password='.$password;
         }
 
-        $command[] = $this->source;
+        $command[] = $file;
 
         $result = Process::run($command);
 
         if (! $result->successful()) {
             throw new ProcessFailedException(
-                'Collate: failed to read PDF — '.$result->errorOutput(),
+                sprintf('Collate: failed to read PDF for %s — %s', $action, $result->errorOutput()),
                 $result->exitCode() ?? 1,
                 $result->errorOutput(),
             );
@@ -1515,11 +1581,36 @@ class PendingCollate implements Responsable
         $json = json_decode($result->output(), true);
 
         if (! is_array($json) || ! is_array($json['qpdf'] ?? null) || ! is_array($json['qpdf'][1] ?? null)) {
-            throw new RuntimeException('Collate: failed to parse qpdf JSON output — unexpected structure.');
+            throw new RuntimeException(
+                sprintf('Collate: failed to parse qpdf JSON output for %s — unexpected structure.', $action)
+            );
         }
 
         /** @var array<string, mixed> $json */
-        return $this->qpdfJsonCache = $json;
+        return $json;
+    }
+
+    /**
+     * Check a catalog dictionary for /Dests or /Names /Dests.
+     *
+     * @param  array<string, mixed>  $qpdfObjects
+     * @param  array<string, mixed>  $catalogValue
+     */
+    protected function catalogHasNamedDestinations(array $qpdfObjects, array $catalogValue): bool
+    {
+        if (array_key_exists('/Dests', $catalogValue)) {
+            return true;
+        }
+
+        $names = $catalogValue['/Names'] ?? null;
+        if (is_string($names)) {
+            $namesObject = $qpdfObjects['obj:'.$names] ?? null;
+            $names = is_array($namesObject) && is_array($namesObject['value'] ?? null)
+                ? $namesObject['value']
+                : null;
+        }
+
+        return is_array($names) && array_key_exists('/Dests', $names);
     }
 
     /**
@@ -1548,24 +1639,28 @@ class PendingCollate implements Responsable
             $command[] = '--decrypt';
         }
 
-        // qpdf takes document-level data (outlines, bookmarks, tags) from the
-        // primary input file. When a source is set, always use it as the
-        // primary input so that document metadata is preserved. Inside --pages,
-        // use "." to refer back to this primary input file.
-        // When there is no source at all, --empty is the correct base.
-        $command[] = $this->source ?: '--empty';
+        // qpdf takes document-level data (names, outlines, bookmarks, tags)
+        // from the primary input file. When a merged addition has named
+        // destinations and the source/empty input does not, use that addition
+        // as the primary input while preserving the requested page order below.
+        $primaryInput = $this->documentDataPrimaryAddition !== null
+            ? $this->additions[$this->documentDataPrimaryAddition]['file']
+            : ($this->source ?: '--empty');
+
+        $command[] = $primaryInput;
 
         // The --pages block controls which pages end up in the output.
         // "." refers to the primary input file specified above.
-        if ($this->source) {
+        if ($this->source !== null) {
+            $source = $this->source;
             $pages = $pageOverride ?? $this->pageSelection;
 
             $command[] = '--pages';
-            $command[] = '.';
+            $command[] = $this->documentDataPrimaryAddition === null ? '.' : $source;
             $command[] = $pages ?? '1-z';
 
-            foreach ($this->additions as $addition) {
-                $command[] = $addition['file'];
+            foreach ($this->additions as $index => $addition) {
+                $command[] = $this->documentDataPrimaryAddition === $index ? '.' : $addition['file'];
                 $command[] = $addition['pages'] ?? '1-z';
             }
 
@@ -1573,8 +1668,8 @@ class PendingCollate implements Responsable
         } elseif ($this->additions !== []) {
             $command[] = '--pages';
 
-            foreach ($this->additions as $addition) {
-                $command[] = $addition['file'];
+            foreach ($this->additions as $index => $addition) {
+                $command[] = $this->documentDataPrimaryAddition === $index ? '.' : $addition['file'];
                 $command[] = $addition['pages'] ?? '1-z';
             }
 
@@ -1702,6 +1797,7 @@ class PendingCollate implements Responsable
     {
         $this->memoizedTotalPageCount = null;
         $this->qpdfJsonCache = null;
+        $this->documentDataPrimaryAddition = null;
         $this->clearProcessedFile();
     }
 
