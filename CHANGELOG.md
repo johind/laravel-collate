@@ -2,7 +2,7 @@
 
 All notable changes to `Collate` will be documented in this file.
 
-## 1.5.2 - 2026-05-07
+## 1.5.2 - 2026-05-08
 
 ### Added
 - Extend `inspect()` semantic alias for `open()` with inspection methods:
@@ -13,6 +13,9 @@ All notable changes to `Collate` will be documented in this file.
 - qpdf JSON reads are pinned to version 2 and memoized to keep inspection parsing stable while avoiding redundant shell commands in chained inspection calls.
 - `hasPassword()`, `isOptimized()`, `hasStrippedMetadata()`, `pdfVersion()`, and `pageSize()` on `PendingCollateFake` for testing.
 - Internal helpers for source validation and qpdf JSON patching: `requireSource()`, `readQpdfObjectsForUpdate()`, and `updatePdfFromJsonPatch()`.
+
+### Fixed
+- Preserve internal table-of-contents links when merging a clean cover page with a generated report ([#2]). This fixes the common case where one PDF contains the clickable table of contents and section targets, while the other merged PDFs do not contain their own internal link targets. Merging multiple PDFs that each contain their own internal table-of-contents links remains a known limitation and will be addressed in a future release.
 
 ### Documentation
 - Documented inspection, optimization, and metadata stripping APIs in README.
