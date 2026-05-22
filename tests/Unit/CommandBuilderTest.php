@@ -6,9 +6,9 @@ use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
     Storage::fake('local');
-    Storage::put('source.pdf', file_get_contents(fixturePath('single-page.pdf')));
-    Storage::put('addition.pdf', file_get_contents(fixturePath('single-page.pdf')));
-    Storage::put('overlay.pdf', file_get_contents(fixturePath('single-page.pdf')));
+    Storage::put('source.pdf', fixtureContents('single-page.pdf'));
+    Storage::put('addition.pdf', fixtureContents('single-page.pdf'));
+    Storage::put('overlay.pdf', fixtureContents('single-page.pdf'));
 });
 
 describe('input file', function (): void {
@@ -182,6 +182,8 @@ describe('encryption', function (): void {
 
         // The -- after the encrypt block must exist
         $encryptIndex = array_search('--encrypt', $command, true);
+        expect($encryptIndex)->toBeInt();
+        assert(is_int($encryptIndex));
         $sliceAfterEncrypt = array_slice($command, $encryptIndex);
 
         expect(in_array('--', $sliceAfterEncrypt))->toBeTrue();

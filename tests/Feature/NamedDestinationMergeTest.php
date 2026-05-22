@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
     if (! qpdfAvailable()) {
-        test()->skip('qpdf binary not available');
+        skipTest('qpdf binary not available');
     }
 
     Storage::fake('local');
@@ -19,34 +19,53 @@ it('preserves named destinations from a secondary merge input', function (): voi
     makeCollate()->merge('cover.pdf', 'contents.pdf')->save('report.pdf');
 
     $json = storageQpdfJson('report.pdf');
-    $objects = $json['qpdf'][1];
     $catalog = namedDestinationMergeCatalog($json);
 
     expect($catalog)->toHaveKey('/Names');
 
-    $namesRef = $catalog['/Names'];
-    $namesObject = $objects['obj:'.$namesRef]['value'];
-    $destsRef = $namesObject['/Dests'];
-    $destsObject = $objects['obj:'.$destsRef]['value'];
-    $destination = $destsObject['/Names'][1];
-    $targetPage = collect($json['pages'])->first(
-        fn (array $page): bool => ($page['pageposfrom1'] ?? null) === 3,
-    );
+    $namesRef = $catalog['/Names'] ?? null;
+    if (! is_string($namesRef)) {
+        throw new RuntimeException('Expected /Names to be an object reference.');
+    }
 
-    expect($json['pages'])->toHaveCount(3)
-        ->and($destsObject['/Names'][0])->toBe('u:section1')
+    $namesObject = qpdfObjectValue($json, $namesRef);
+    $destsRef = $namesObject['/Dests'] ?? null;
+    if (! is_string($destsRef)) {
+        throw new RuntimeException('Expected /Dests to be an object reference.');
+    }
+
+    $destsObject = qpdfObjectValue($json, $destsRef);
+    $destinationNames = $destsObject['/Names'] ?? null;
+    if (! is_array($destinationNames)) {
+        throw new RuntimeException('Expected named destination names array.');
+    }
+
+    $destination = $destinationNames[1] ?? null;
+    if (! is_array($destination)) {
+        throw new RuntimeException('Expected named destination target array.');
+    }
+
+    $targetPage = qpdfPageInfo($json, 3);
+
+    expect(qpdfPages($json))->toHaveCount(3)
+        ->and($destinationNames[0] ?? null)->toBe('u:section1')
         ->and($destination[0])->toBe($targetPage['object']);
 });
 
 /**
+ * @param  array<string, mixed>  $json
  * @return array<string, mixed>
  */
 function namedDestinationMergeCatalog(array $json): array
 {
-    $objects = $json['qpdf'][1];
-    $rootRef = $objects['trailer']['value']['/Root'];
+    $objects = qpdfObjects($json);
+    $rootRef = qpdfValue($objects, 'trailer', 'value', '/Root');
 
-    return $objects['obj:'.$rootRef]['value'];
+    if (! is_string($rootRef)) {
+        throw new RuntimeException('Expected trailer root to be an object reference.');
+    }
+
+    return qpdfObjectValue($json, $rootRef);
 }
 
 function namedDestinationMergeCoverPdf(): string
@@ -91,8 +110,9 @@ function namedDestinationMergePdf(array $objects): string
 
     $xref = mb_strlen($pdf);
     $pdf .= "xref\n0 ".(count($objects) + 1)."\n0000000000 65535 f \n";
+    $counter = count($objects);
 
-    for ($object = 1; $object <= count($objects); $object++) {
+    for ($object = 1; $object <= $counter; $object++) {
         $pdf .= mb_str_pad((string) $offsets[$object], 10, '0', STR_PAD_LEFT)." 00000 n \n";
     }
 

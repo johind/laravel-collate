@@ -95,7 +95,7 @@ describe('assertions', function (): void {
         $fake->open('doc.pdf')->save('output.pdf');
 
         $fake->assertSaved('output.pdf');
-        $fake->assertSaved(null, fn ($p): bool => $p->sourcePath() === 'doc.pdf');
+        $fake->assertSaved(null, fn (PendingCollateFake $p): bool => $p->sourcePath() === 'doc.pdf');
     });
 
     it('fails when asserting a missing saved PDF', function (): void {
@@ -126,7 +126,7 @@ describe('assertions', function (): void {
         $fake->open('doc.pdf')->download('download.pdf');
 
         $fake->assertDownloaded('download.pdf');
-        $fake->assertDownloaded(null, fn ($p): bool => $p->sourcePath() === 'doc.pdf');
+        $fake->assertDownloaded(null, fn (PendingCollateFake $p): bool => $p->sourcePath() === 'doc.pdf');
     });
 
     it('fails when asserting a missing download', function (): void {
@@ -157,7 +157,7 @@ describe('assertions', function (): void {
         $fake->open('doc.pdf')->stream('stream.pdf');
 
         $fake->assertStreamed('stream.pdf');
-        $fake->assertStreamed(null, fn ($p): bool => $p->sourcePath() === 'doc.pdf');
+        $fake->assertStreamed(null, fn (PendingCollateFake $p): bool => $p->sourcePath() === 'doc.pdf');
     });
 
     it('fails when asserting a missing stream', function (): void {

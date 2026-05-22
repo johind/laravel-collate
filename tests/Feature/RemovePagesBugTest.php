@@ -11,7 +11,7 @@ beforeEach(function (): void {
 
 it('successfully removes the last page of a document', function (): void {
     $path = fixturePath('single-page.pdf'); // 1 page
-    Storage::put('single.pdf', file_get_contents($path));
+    Storage::put('single.pdf', fileContents($path));
 
     $pending = Collate::open('single.pdf')->removePage(1);
     expect(getProperty($pending, 'pageSelection'))->toBe('1-z,x1');
@@ -28,7 +28,7 @@ it('successfully removes the last page of a document', function (): void {
 
 it('successfully removes the last page of a multi-page document', function (): void {
     $path = fixturePath('multi-page.pdf');
-    Storage::put('multi.pdf', file_get_contents($path));
+    Storage::put('multi.pdf', fileContents($path));
 
     $count = Collate::open('multi.pdf')->pageCount();
 

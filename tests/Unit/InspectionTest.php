@@ -8,12 +8,12 @@ use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
     Storage::fake('local');
-    Storage::put('doc.pdf', file_get_contents(fixturePath('single-page.pdf')));
+    Storage::put('doc.pdf', fixtureContents('single-page.pdf'));
 });
 
 describe('isEncrypted()', function (): void {
     it('throws when no source file is set', function (): void {
-        expect(fn (): bool => (new Johind\Collate\PendingCollate(makeCollate()))->isEncrypted())
+        expect(fn (): bool => new Johind\Collate\PendingCollate(makeCollate())->isEncrypted())
             ->toThrow(
                 BadMethodCallException::class,
                 'Collate: cannot call isEncrypted() when no source file is set. Use open() or inspect() first.',
@@ -21,7 +21,7 @@ describe('isEncrypted()', function (): void {
     });
 
     it('throws when qpdf returns an unexpected inspection exit code', function (): void {
-        Process::fake(fn () => new FakeProcessResult(exitCode: 3, errorOutput: 'qpdf failed'));
+        Process::fake(fn (): FakeProcessResult => new FakeProcessResult(exitCode: 3, errorOutput: 'qpdf failed'));
 
         expect(fn (): bool => makeCollate()->inspect('doc.pdf')->isEncrypted())
             ->toThrow(Johind\Collate\Exceptions\ProcessFailedException::class, 'Collate: failed to inspect PDF');
@@ -30,7 +30,7 @@ describe('isEncrypted()', function (): void {
 
 describe('hasPassword()', function (): void {
     it('throws when no source file is set', function (): void {
-        expect(fn (): bool => (new Johind\Collate\PendingCollate(makeCollate()))->hasPassword())
+        expect(fn (): bool => new Johind\Collate\PendingCollate(makeCollate())->hasPassword())
             ->toThrow(BadMethodCallException::class);
     });
 });
@@ -66,7 +66,7 @@ describe('metadata()', function (): void {
 
 describe('isLinearized()', function (): void {
     it('throws when no source file is set', function (): void {
-        expect(fn (): bool => (new Johind\Collate\PendingCollate(makeCollate()))->isLinearized())
+        expect(fn (): bool => new Johind\Collate\PendingCollate(makeCollate())->isLinearized())
             ->toThrow(BadMethodCallException::class);
     });
 
@@ -112,19 +112,19 @@ describe('isLinearized()', function (): void {
 
 describe('pdfVersion()', function (): void {
     it('throws when no source file is set', function (): void {
-        expect(fn (): string => (new Johind\Collate\PendingCollate(makeCollate()))->pdfVersion())
+        expect(fn (): string => new Johind\Collate\PendingCollate(makeCollate())->pdfVersion())
             ->toThrow(BadMethodCallException::class);
     });
 
     it('throws when qpdf JSON reading fails', function (): void {
-        Process::fake(fn () => new FakeProcessResult(exitCode: 1, errorOutput: 'cannot read file'));
+        Process::fake(fn (): FakeProcessResult => new FakeProcessResult(exitCode: 1, errorOutput: 'cannot read file'));
 
         expect(fn (): string => makeCollate()->inspect('doc.pdf')->pdfVersion())
             ->toThrow(Johind\Collate\Exceptions\ProcessFailedException::class, 'Collate: failed to read PDF');
     });
 
     it('throws when qpdf JSON has an unexpected structure', function (): void {
-        Process::fake(fn () => new FakeProcessResult(output: json_encode(['qpdf' => []])));
+        Process::fake(fn (): FakeProcessResult => new FakeProcessResult(output: jsonString(['qpdf' => []])));
 
         expect(fn (): string => makeCollate()->inspect('doc.pdf')->pdfVersion())
             ->toThrow(RuntimeException::class, 'Collate: failed to parse qpdf JSON output');
@@ -146,7 +146,7 @@ describe('pdfVersion()', function (): void {
     });
 
     it('memoizes qpdf JSON across inspection methods and requests JSON version 2', function (): void {
-        Process::fake(fn () => new FakeProcessResult(output: json_encode([
+        Process::fake(fn (): FakeProcessResult => new FakeProcessResult(output: jsonString([
             'pages' => [
                 ['pageposfrom1' => 1, 'object' => '3 0 R'],
             ],
@@ -181,7 +181,7 @@ describe('pdfVersion()', function (): void {
             ->and($pending->metadata()->title)->toBe('Memoized Title');
 
         Process::assertRanTimes(
-            fn ($process): bool => is_array($process->command)
+            fn (Illuminate\Process\PendingProcess $process): bool => is_array($process->command)
                 && in_array('--json=2', $process->command, true),
             1,
         );
@@ -190,7 +190,7 @@ describe('pdfVersion()', function (): void {
 
 describe('pageSize()', function (): void {
     it('throws when no source file is set', function (): void {
-        expect(fn (): Johind\Collate\PageSize => (new Johind\Collate\PendingCollate(makeCollate()))->pageSize())
+        expect(fn (): Johind\Collate\PageSize => new Johind\Collate\PendingCollate(makeCollate())->pageSize())
             ->toThrow(BadMethodCallException::class);
     });
 
@@ -463,24 +463,24 @@ describe('withoutMetadata()', function (): void {
     });
 
     it('throws when called after withMetadata()', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->withMetadata(title: 'Test')->withoutMetadata())
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->withMetadata(title: 'Test')->withoutMetadata())
             ->toThrow(BadMethodCallException::class);
     });
 
     it('throws when called after withMetadata() receives a metadata object', function (): void {
         $metadata = new Johind\Collate\PdfMetadata(title: 'Test');
 
-        expect(fn () => makeCollate()->open('doc.pdf')->withMetadata($metadata)->withoutMetadata())
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->withMetadata($metadata)->withoutMetadata())
             ->toThrow(BadMethodCallException::class);
     });
 
     it('throws after withMetadata() has been explicitly called with no values', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->withMetadata()->withoutMetadata())
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->withMetadata()->withoutMetadata())
             ->toThrow(BadMethodCallException::class);
     });
 
     it('prevents withMetadata() from being called after', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->withoutMetadata()->withMetadata(title: 'Test'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->withoutMetadata()->withMetadata(title: 'Test'))
             ->toThrow(BadMethodCallException::class);
     });
 

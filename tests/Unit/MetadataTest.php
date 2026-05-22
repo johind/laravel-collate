@@ -7,7 +7,7 @@ use Johind\Collate\PdfMetadata;
 
 beforeEach(function (): void {
     Storage::fake('local');
-    Storage::put('doc.pdf', file_get_contents(fixturePath('single-page.pdf')));
+    Storage::put('doc.pdf', fixtureContents('single-page.pdf'));
 });
 
 describe('metadata()', function (): void {
@@ -83,7 +83,7 @@ describe('withMetadata()', function (): void {
         $meta = new PdfMetadata(title: 'Existing Title', author: 'Existing Author');
         $pending = makeCollate()->open('doc.pdf')->withMetadata($meta);
 
-        $metadata = getProperty($pending, 'metadata');
+        $metadata = getArrayProperty($pending, 'metadata');
         expect($metadata['Title'])->toBe('Existing Title')
             ->and($metadata['Author'])->toBe('Existing Author');
     });
@@ -92,7 +92,7 @@ describe('withMetadata()', function (): void {
         $meta = new PdfMetadata(title: 'Original Title', author: 'Original Author');
         $pending = makeCollate()->open('doc.pdf')->withMetadata($meta, author: 'New Author');
 
-        $metadata = getProperty($pending, 'metadata');
+        $metadata = getArrayProperty($pending, 'metadata');
         expect($metadata['Title'])->toBe('Original Title')
             ->and($metadata['Author'])->toBe('New Author');
     });

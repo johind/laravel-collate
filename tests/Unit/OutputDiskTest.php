@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function (): void {
     Storage::fake('local');
     Storage::fake('s3');
-    Storage::put('doc.pdf', file_get_contents(fixturePath('single-page.pdf')));
+    Storage::put('doc.pdf', fixtureContents('single-page.pdf'));
 });
 
 it('sets the output disk', function (): void {

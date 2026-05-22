@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
     Storage::fake('local');
-    Storage::put('doc.pdf', file_get_contents(fixturePath('twelve-page.pdf')));
+    Storage::put('doc.pdf', fixtureContents('twelve-page.pdf'));
 });
 
 describe('onlyPages()', function (): void {
@@ -42,32 +42,32 @@ describe('onlyPages()', function (): void {
     });
 
     it('throws for non-numeric token like "x3"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('x3'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->onlyPages('x3'))
             ->toThrow(InvalidArgumentException::class);
     });
 
     it('throws for empty segments from double comma "1,,3"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('1,,3'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->onlyPages('1,,3'))
             ->toThrow(InvalidArgumentException::class);
     });
 
     it('throws for trailing comma "1-3,,"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('1-3,,'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->onlyPages('1-3,,'))
             ->toThrow(InvalidArgumentException::class);
     });
 
     it('throws for stacked modifiers "1-z:odd:even"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('1-z:odd:even'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->onlyPages('1-z:odd:even'))
             ->toThrow(InvalidArgumentException::class);
     });
 
     it('throws for double dash "1--3"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('1--3'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->onlyPages('1--3'))
             ->toThrow(InvalidArgumentException::class);
     });
 
     it('throws for page zero in range "z-0"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->onlyPages('z-0'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->onlyPages('z-0'))
             ->toThrow(InvalidArgumentException::class);
     });
 });
@@ -225,10 +225,10 @@ it('removePage() delegates correctly to removePages()', function (): void {
 describe('addPage()', function (): void {
     it('delegates correctly to addPages() with explicit page number', function (): void {
         $pending = makeCollate()->open('doc.pdf')->addPage('doc.pdf', 5);
-        $additions = getProperty($pending, 'additions');
+        $additions = getArrayProperty($pending, 'additions');
 
         expect($additions)->toHaveCount(1)
-            ->and($additions[0]['pages'])->toBe('5');
+            ->and(qpdfValue($additions, 0, 'pages'))->toBe('5');
     });
 });
 
@@ -236,7 +236,7 @@ describe('addPages()', function (): void {
     it('supports "z" in the range parameter', function (): void {
         $pending = makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1-z');
 
-        expect(getProperty($pending, 'additions')[0]['pages'])->toBe('1-z');
+        expect(qpdfValue(getArrayProperty($pending, 'additions'), 0, 'pages'))->toBe('1-z');
     });
 
     it('throws when an array of files is combined with a range', function (): void {
@@ -246,32 +246,32 @@ describe('addPages()', function (): void {
     });
 
     it('throws for non-numeric token like "x3"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', 'x3'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->addPages('doc.pdf', 'x3'))
             ->toThrow(InvalidArgumentException::class);
     });
 
     it('throws for empty segments from double comma "1,,3"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1,,3'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1,,3'))
             ->toThrow(InvalidArgumentException::class);
     });
 
     it('throws for trailing comma "1-3,,"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1-3,,'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1-3,,'))
             ->toThrow(InvalidArgumentException::class);
     });
 
     it('throws for stacked modifiers "1-z:odd:even"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1-z:odd:even'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1-z:odd:even'))
             ->toThrow(InvalidArgumentException::class);
     });
 
     it('throws for double dash "1--3"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1--3'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->addPages('doc.pdf', '1--3'))
             ->toThrow(InvalidArgumentException::class);
     });
 
     it('throws for page zero in range "z-0"', function (): void {
-        expect(fn () => makeCollate()->open('doc.pdf')->addPages('doc.pdf', 'z-0'))
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->addPages('doc.pdf', 'z-0'))
             ->toThrow(InvalidArgumentException::class);
     });
 });

@@ -7,12 +7,12 @@ use Johind\Collate\PdfMetadata;
 
 beforeEach(function (): void {
     if (! qpdfAvailable()) {
-        test()->skip('qpdf binary not available');
+        skipTest('qpdf binary not available');
     }
 
     Storage::fake('local');
-    Storage::put('doc.pdf', file_get_contents(fixturePath('single-page.pdf')));
-    Storage::put('multi.pdf', file_get_contents(fixturePath('multi-page.pdf')));
+    Storage::put('doc.pdf', fixtureContents('single-page.pdf'));
+    Storage::put('multi.pdf', fixtureContents('multi-page.pdf'));
 });
 
 describe('pageCount()', function (): void {

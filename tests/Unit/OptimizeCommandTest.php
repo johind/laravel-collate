@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
     Storage::fake('local');
-    Storage::put('doc.pdf', file_get_contents(fixturePath('single-page.pdf')));
+    Storage::put('doc.pdf', fixtureContents('single-page.pdf'));
 });
 
 describe('optimize()', function (): void {

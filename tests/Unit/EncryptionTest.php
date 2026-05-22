@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
     Storage::fake('local');
-    Storage::put('doc.pdf', file_get_contents(fixturePath('single-page.pdf')));
+    Storage::put('doc.pdf', fixtureContents('single-page.pdf'));
 });
 
 describe('encrypt()', function (): void {
@@ -18,24 +18,24 @@ describe('encrypt()', function (): void {
     it('accepts 40-bit encryption', function (): void {
         $pending = makeCollate()->open('doc.pdf')->encrypt('password', bitLength: 40);
 
-        expect(getProperty($pending, 'encryption')['bit_length'])->toBe(40);
+        expect(qpdfValue(getArrayProperty($pending, 'encryption'), 'bit_length'))->toBe(40);
     });
 
     it('accepts 128-bit encryption', function (): void {
         $pending = makeCollate()->open('doc.pdf')->encrypt('password', bitLength: 128);
 
-        expect(getProperty($pending, 'encryption')['bit_length'])->toBe(128);
+        expect(qpdfValue(getArrayProperty($pending, 'encryption'), 'bit_length'))->toBe(128);
     });
 
     it('accepts 256-bit encryption', function (): void {
         $pending = makeCollate()->open('doc.pdf')->encrypt('password', bitLength: 256);
 
-        expect(getProperty($pending, 'encryption')['bit_length'])->toBe(256);
+        expect(qpdfValue(getArrayProperty($pending, 'encryption'), 'bit_length'))->toBe(256);
     });
 
     it('defaults the owner password to the user password', function (): void {
         $pending = makeCollate()->open('doc.pdf')->encrypt('secret');
-        $encryption = getProperty($pending, 'encryption');
+        $encryption = getArrayProperty($pending, 'encryption');
 
         expect($encryption['user_password'])->toBe('secret')
             ->and($encryption['owner_password'])->toBe('secret');
@@ -43,7 +43,7 @@ describe('encrypt()', function (): void {
 
     it('accepts separate user and owner passwords', function (): void {
         $pending = makeCollate()->open('doc.pdf')->encrypt('user', 'owner');
-        $encryption = getProperty($pending, 'encryption');
+        $encryption = getArrayProperty($pending, 'encryption');
 
         expect($encryption['user_password'])->toBe('user')
             ->and($encryption['owner_password'])->toBe('owner');

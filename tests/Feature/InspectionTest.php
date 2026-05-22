@@ -7,14 +7,14 @@ use Johind\Collate\PageSize;
 
 beforeEach(function (): void {
     if (! qpdfAvailable()) {
-        test()->skip('qpdf binary not available');
+        skipTest('qpdf binary not available');
     }
 
     Storage::fake('local');
-    Storage::put('doc.pdf', file_get_contents(fixturePath('single-page.pdf')));
-    Storage::put('multi.pdf', file_get_contents(fixturePath('multi-page.pdf')));
-    Storage::put('encrypted.pdf', file_get_contents(fixturePath('encrypted.pdf')));
-    Storage::put('annotated.pdf', file_get_contents(fixturePath('annotated.pdf')));
+    Storage::put('doc.pdf', fixtureContents('single-page.pdf'));
+    Storage::put('multi.pdf', fixtureContents('multi-page.pdf'));
+    Storage::put('encrypted.pdf', fixtureContents('encrypted.pdf'));
+    Storage::put('annotated.pdf', fixtureContents('annotated.pdf'));
 });
 
 describe('isEncrypted()', function (): void {
@@ -113,7 +113,7 @@ describe('pageSize()', function (): void {
     });
 
     it('throws for a page that does not exist', function (): void {
-        expect(fn () => makeCollate()->inspect('doc.pdf')->pageSize(99))
+        expect(fn (): PageSize => makeCollate()->inspect('doc.pdf')->pageSize(99))
             ->toThrow(InvalidArgumentException::class);
     });
 });
@@ -178,8 +178,8 @@ describe('optimize()', function (): void {
             ->optimize()
             ->save('optimized.pdf');
 
-        $originalSize = mb_strlen(Storage::get('doc.pdf'), '8bit');
-        $optimizedSize = mb_strlen(Storage::get('optimized.pdf'), '8bit');
+        $originalSize = mb_strlen(storageContents('doc.pdf'), '8bit');
+        $optimizedSize = mb_strlen(storageContents('optimized.pdf'), '8bit');
 
         expect($optimizedSize)->toBeLessThanOrEqual($originalSize);
     });
@@ -191,7 +191,7 @@ describe('optimize()', function (): void {
             ->linearize()
             ->save('combined.pdf');
 
-        $content = Storage::get('combined.pdf');
+        $content = storageContents('combined.pdf');
 
         expect(mb_substr($content, 0, 4))->toBe('%PDF')
             ->and($content)->toContain('/Linearized');

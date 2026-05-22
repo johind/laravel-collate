@@ -7,15 +7,15 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 beforeEach(function (): void {
     if (! qpdfAvailable()) {
-        test()->skip('qpdf binary not available');
+        skipTest('qpdf binary not available');
     }
 
     Storage::fake('local');
     Storage::fake('s3');
-    Storage::put('input.pdf', file_get_contents(fixturePath('single-page.pdf')));
-    Storage::put('multi.pdf', file_get_contents(fixturePath('multi-page.pdf')));
-    Storage::put('twelve.pdf', file_get_contents(fixturePath('twelve-page.pdf')));
-    Storage::put('encrypted.pdf', file_get_contents(fixturePath('encrypted.pdf')));
+    Storage::put('input.pdf', fixtureContents('single-page.pdf'));
+    Storage::put('multi.pdf', fixtureContents('multi-page.pdf'));
+    Storage::put('twelve.pdf', fixtureContents('twelve-page.pdf'));
+    Storage::put('encrypted.pdf', fixtureContents('encrypted.pdf'));
 });
 
 describe('save()', function (): void {
@@ -38,7 +38,7 @@ describe('save()', function (): void {
         $pending = makeCollate()->open('input.pdf');
         $pending->save('output.pdf');
 
-        $processedPath = getProperty($pending, 'processedPath');
+        $processedPath = getStringProperty($pending, 'processedPath');
         expect($processedPath)->not->toBeNull()
             ->and(file_exists($processedPath))->toBeTrue();
 
@@ -63,10 +63,10 @@ describe('memoization', function (): void {
         $pending = makeCollate()->open('input.pdf');
 
         $content1 = $pending->content();
-        $processedPath1 = getProperty($pending, 'processedPath');
+        $processedPath1 = getStringProperty($pending, 'processedPath');
 
         $content2 = $pending->content();
-        $processedPath2 = getProperty($pending, 'processedPath');
+        $processedPath2 = getStringProperty($pending, 'processedPath');
 
         expect($processedPath1)->not->toBeNull()
             ->and($processedPath2)->toBe($processedPath1)
@@ -74,12 +74,12 @@ describe('memoization', function (): void {
     });
 
     it('clears the memoized result when a mutation occurs', function (): void {
-        Storage::put('other.pdf', file_get_contents(fixturePath('single-page.pdf')));
+        Storage::put('other.pdf', fixtureContents('single-page.pdf'));
 
         $pending = makeCollate()->open('input.pdf');
         $pending->content();
 
-        $firstProcessedPath = getProperty($pending, 'processedPath');
+        $firstProcessedPath = getStringProperty($pending, 'processedPath');
         expect($firstProcessedPath)->not->toBeNull();
 
         $pending->addPages('other.pdf');
@@ -92,7 +92,7 @@ describe('memoization', function (): void {
         $pending = makeCollate()->open('input.pdf');
         $pending->content();
 
-        $processedPath = getProperty($pending, 'processedPath');
+        $processedPath = getStringProperty($pending, 'processedPath');
         expect(file_exists($processedPath))->toBeTrue();
 
         unset($pending);
@@ -167,7 +167,7 @@ describe('split()', function (): void {
 
         expect($paths->unique())->toHaveCount(1)
             ->and(Storage::exists('pages/page.pdf'))->toBeTrue()
-            ->and(mb_substr(Storage::get('pages/page.pdf'), 0, 4))->toBe('%PDF');
+            ->and(mb_substr(storageContents('pages/page.pdf'), 0, 4))->toBe('%PDF');
     });
 
     it('respects page selection applied before splitting', function (): void {
@@ -212,8 +212,8 @@ describe('split()', function (): void {
             ->split('split-enc/page-{page}.pdf');
 
         expect($paths)->toHaveCount($pageCount);
-        $paths->each(fn ($path) => expect(Storage::exists($path))->toBeTrue()
-            ->and(mb_substr(Storage::get($path), 0, 4))->toBe('%PDF'));
+        $paths->each(fn (string $path) => expect(Storage::exists($path))->toBeTrue()
+            ->and(mb_substr(storageContents($path), 0, 4))->toBe('%PDF'));
     });
 });
 
@@ -221,7 +221,7 @@ describe('decrypt()', function (): void {
     it('successfully processes a password-protected document', function (): void {
         makeCollate()->open('encrypted.pdf')->decrypt('test')->save('decrypted.pdf');
 
-        $decrypted = Storage::get('decrypted.pdf');
+        $decrypted = storageContents('decrypted.pdf');
 
         expect(mb_substr($decrypted, 0, 4))->toBe('%PDF');
 
@@ -240,7 +240,7 @@ describe('decrypt()', function (): void {
 
         $mergedPageCount = makeCollate()->inspect('merged.pdf')->pageCount();
 
-        expect(mb_substr(Storage::get('merged.pdf'), 0, 4))->toBe('%PDF')
+        expect(mb_substr(storageContents('merged.pdf'), 0, 4))->toBe('%PDF')
             ->and($mergedPageCount)->toBe($originalPageCount + 1);
     });
 });

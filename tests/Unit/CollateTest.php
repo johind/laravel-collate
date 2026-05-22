@@ -8,7 +8,7 @@ use Johind\Collate\PendingCollate;
 
 beforeEach(function (): void {
     Storage::fake('local');
-    Storage::put('doc.pdf', file_get_contents(fixturePath('single-page.pdf')));
+    Storage::put('doc.pdf', fixtureContents('single-page.pdf'));
 });
 
 it('stores the binary path', function (): void {
@@ -59,8 +59,10 @@ describe('open()', function (): void {
     it('sets the source file on the builder', function (): void {
         $pending = makeCollate()->open('doc.pdf');
 
-        expect(getProperty($pending, 'source'))->toBeString()
-            ->and(str_ends_with(getProperty($pending, 'source'), 'doc.pdf'))->toBeTrue();
+        $source = getStringProperty($pending, 'source');
+
+        expect($source)->toBeString()
+            ->and(str_ends_with($source, 'doc.pdf'))->toBeTrue();
     });
 });
 
@@ -72,14 +74,16 @@ describe('inspect()', function (): void {
     it('sets the source file on the builder', function (): void {
         $pending = makeCollate()->inspect('doc.pdf');
 
-        expect(getProperty($pending, 'source'))->toBeString()
-            ->and(str_ends_with(getProperty($pending, 'source'), 'doc.pdf'))->toBeTrue();
+        $source = getStringProperty($pending, 'source');
+
+        expect($source)->toBeString()
+            ->and(str_ends_with($source, 'doc.pdf'))->toBeTrue();
     });
 });
 
 describe('merge()', function (): void {
     beforeEach(function (): void {
-        Storage::put('b.pdf', file_get_contents(fixturePath('single-page.pdf')));
+        Storage::put('b.pdf', fixtureContents('single-page.pdf'));
     });
 
     it('returns a PendingCollate', function (): void {
@@ -101,9 +105,11 @@ describe('merge()', function (): void {
     it('handles mixed array and string arguments correctly', function (): void {
         $pending = makeCollate()->merge(['doc.pdf'], 'b.pdf');
 
-        expect(getProperty($pending, 'additions'))->toHaveCount(2)
-            ->and(getProperty($pending, 'additions')[0]['file'])->toBe(Storage::path('doc.pdf'))
-            ->and(getProperty($pending, 'additions')[1]['file'])->toBe(Storage::path('b.pdf'));
+        $additions = getArrayProperty($pending, 'additions');
+
+        expect($additions)->toHaveCount(2)
+            ->and(qpdfValue($additions, 0, 'file'))->toBe(Storage::path('doc.pdf'))
+            ->and(qpdfValue($additions, 1, 'file'))->toBe(Storage::path('b.pdf'));
     });
 
     it('closure receives and can mutate the pending instance', function (): void {
@@ -126,5 +132,9 @@ it('can use macros on PendingCollate', function (): void {
 
     $pending = makeCollate()->open('doc.pdf');
 
-    expect($pending->testMacro())->toBe('macro-called');
+    /** @phpstan-ignore method.notFound */
+    $result = $pending->testMacro();
+
+    assert(is_string($result));
+    expect($result)->toBe('macro-called');
 });
