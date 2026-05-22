@@ -587,6 +587,9 @@ improving error handling or enhancing performance. If you have an idea for a new
 discuss it with me first, since I want to ensure that the scope of the package remains focused. Please note that I do
 not provide monetary compensation for contributions.
 
+Before submitting a code change, run `composer check`. Collate uses Pest for all tests; please do not add PHPUnit test
+classes or run the suite through `vendor/bin/phpunit`.
+
 ## Security
 
 If you discover a security vulnerability, please send an email rather than opening a GitHub issue.

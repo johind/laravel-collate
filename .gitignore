@@ -30,5 +30,6 @@ phpstan.neon
 testbench.yaml
 /docs
 /coverage
+/.ai/
 
 .DS_Store

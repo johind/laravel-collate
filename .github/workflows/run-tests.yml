@@ -8,6 +8,7 @@ on:
       - "phpunit.xml.dist"
       - "composer.json"
       - "composer.lock"
+      - "tests/Pest.php"
   pull_request:
     paths:
       - "**.php"
@@ -15,6 +16,7 @@ on:
       - "phpunit.xml.dist"
       - "composer.json"
       - "composer.lock"
+      - "tests/Pest.php"
   workflow_dispatch:
 
 concurrency:
@@ -80,4 +82,4 @@ jobs:
         run: composer show -D
 
       - name: Execute tests
-        run: vendor/bin/pest --ci
+        run: composer test:ci
