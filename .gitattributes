@@ -19,3 +19,4 @@
 /UPGRADING.md       export-ignore
 /phpstan.neon.dist  export-ignore
 /phpstan-baseline.neon  export-ignore
+/phpstan-tests.neon.dist  export-ignore

@@ -7,6 +7,7 @@ on:
       - 'composer.json'
       - 'composer.lock'
       - 'phpstan.neon.dist'
+      - 'phpstan-tests.neon.dist'
       - 'phpstan-baseline.neon'
       - '.github/workflows/phpstan.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
       - 'composer.json'
       - 'composer.lock'
       - 'phpstan.neon.dist'
+      - 'phpstan-tests.neon.dist'
       - 'phpstan-baseline.neon'
       - '.github/workflows/phpstan.yml'
   workflow_dispatch:
@@ -38,3 +40,6 @@ jobs:
 
       - name: Run PHPStan
         run: composer analyse -- --error-format=github
+
+      - name: Run PHPStan for tests
+        run: composer analyse:tests -- --error-format=github

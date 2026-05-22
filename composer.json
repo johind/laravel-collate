@@ -55,22 +55,21 @@
         "test:ci": "vendor/bin/pest --ci",
         "test-coverage": "vendor/bin/pest --coverage",
         "analyse": "vendor/bin/phpstan analyse",
-        "analyse:tests": "vendor/bin/phpstan analyse tests --configuration phpstan.neon.dist --debug -vvv",
+        "analyse:tests": "vendor/bin/phpstan analyse --configuration phpstan-tests.neon.dist",
         "rector": "vendor/bin/rector process --dry-run --no-progress-bar",
-        "rector:all": "vendor/bin/rector process src config tests --dry-run --no-progress-bar",
+        "rector:all": "@rector",
         "rector:fix": "vendor/bin/rector process",
         "format": "vendor/bin/pint --parallel",
         "format:check": "vendor/bin/pint --test",
         "check": [
             "@test",
             "@analyse",
+            "@analyse:tests",
             "@rector",
             "@format:check"
         ],
         "check:strict": [
-            "@check",
-            "@analyse:tests",
-            "@rector:all"
+            "@check"
         ]
     },
     "config": {
