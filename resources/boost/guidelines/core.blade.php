@@ -1,149 +1,21 @@
 ## Collate
 
-Collate provides a fluent API for manipulating PDFs in Laravel, powered by qpdf. Use the `Johind\Collate\Facades\Collate` facade.
+Collate is a Laravel PDF manipulation package powered by qpdf. Use the `Johind\Collate\Facades\Collate` facade.
 
-### Requirements
+### Essentials
 
-- PHP 8.4+, Laravel 11/12/13, qpdf v11.7.1+
+- Requirements: PHP 8.4+, Laravel 11/12/13, qpdf 11.7.1+. Prefer `php artisan collate:install` to publish config and verify qpdf.
+- Entry points: `Collate::open($file)` transforms one PDF, `Collate::inspect($file)` reads metadata/page info, and `Collate::merge(...$files)` combines PDFs. Inputs may be storage paths or `UploadedFile` instances; `merge()` also accepts arrays and a closure receiving `PendingCollate`.
+- Disks: `Collate::fromDisk('s3')` selects the input disk and returns a cloned Collate instance. `->toDisk('local')` selects the output disk for a pending operation.
+- Output: `save($path)` returns `bool`; `download($filename)` and `stream($filename)` return PDF responses; `content()` returns binary PDF contents. `split($path)` returns `Collection<int, string>` and should normally use a `{page}` placeholder.
 
-### Entry Points
+### Guardrails
 
-All return a `PendingCollate` fluent builder.
-
-- `Collate::open($file)` — manipulate existing PDF (string path or `UploadedFile`).
-- `Collate::inspect($file)` — read-only inspection (metadata, page count). Semantic alias for `open()`.
-- `Collate::merge(...$files)` — combine multiple PDFs (strings, arrays, `UploadedFile`, or `Closure`).
-
-### Disk Management
-
-- `Collate::fromDisk('s3')` — set input disk (returns a new `Collate` instance).
-- `->toDisk('local')` — set output disk on a `PendingCollate`.
-
-### Page Operations
-
-- `addPage($file, $pageNumber)` — add a single page from another PDF.
-- `addPages($files, $range)` — add pages from file(s). `$range` cannot be used with an array of files.
-- `removePage($pageNumber)` — remove a single page.
-- `removePages($range)` — remove pages by array or range string.
-- `onlyPages($range)` — keep only specified pages. **Mutually exclusive with `removePages()`.**
-- `split($path)` — split into individual pages. Path must contain `{page}`. Returns `Collection<int, string>`.
-- `rotate($degrees, $range)` — rotate pages. Degrees: 0, 90, 180, 270. `$range` defaults to `'1-z'`.
-
-**Page range syntax (qpdf):** `1-5`, `1,3,5`, `1-3,7-9`, `z` (last page), `1-z` (all).
-
-### Overlay / Underlay
-
-- `overlay($file)` — layer on top (watermarks, stamps). Accepts string path or `UploadedFile`.
-- `underlay($file)` — layer behind (backgrounds, letterheads). Accepts string path or `UploadedFile`.
-
-### Encryption & Permissions
-
-- `encrypt($userPassword, $ownerPassword, $bitLength)` — `$ownerPassword` defaults to `$userPassword`. `$bitLength` defaults to `256`. Valid: 40, 128, 256.
-- `decrypt($password)` — decrypt a protected PDF.
-- `restrict(...$permissions)` — **must be called after `encrypt()`.** Valid: `print`, `modify`, `extract`, `annotate`, `assemble`, `print-highres`, `form`, `modify-other`.
-
-### Inspection
-
-- `metadata()` — returns `PdfMetadata` with: `title`, `author`, `subject`, `keywords`, `creator`, `producer`, `creationDate`, `modDate`.
-- `pageCount()` — get page count.
-- `isEncrypted()` — check if the PDF is encrypted.
-- `hasPassword()` — check if a password is required to open the PDF.
-- `isLinearized()` — check if the PDF is linearized.
-- `pdfVersion()` — get the PDF version string (e.g. `'1.7'`).
-- `pageSize($page)` — get underlying page-box dimensions as a `PageSize` instance (`width`, `height`, `widthInInches()`, `heightInInches()`, `widthInMillimeters()`, `heightInMillimeters()`).
-
-### Other Operations
-
-- `flatten()` — flatten form fields/annotations.
-- `linearize()` — optimize for web viewing.
-- `optimize()` — reduce file size by removing redundant data. When combined with `linearize()`, qpdf linearization takes precedence over object stream generation.
-- `withMetadata(title:, author:, subject:, keywords:, creator:, producer:, creationDate:, modDate:)` — set metadata. First argument also accepts a `PdfMetadata` instance (named params override its values).
-- `withoutMetadata()` — strip all metadata from output. **Mutually exclusive with `withMetadata()`.**
-- `dump()` — dump the built qpdf command and continue the chain. **Output may contain sensitive data.**
-- `dd()` — dump the built qpdf command and stop execution. **Output may contain sensitive data.**
-
-### Output
-
-- `save($path)` — save to disk (returns `bool`).
-- `download($filename)` — download response (`StreamedResponse`).
-- `stream($filename)` — inline browser response (`StreamedResponse`).
-- `content()` — raw binary string.
-- Implements `Responsable` — return directly from controllers.
-
-### Traits
-
-- `Conditionable` — use `->when()` for conditional operations.
-- `Macroable` — extend both `Collate` and `PendingCollate` with macros.
-
-### Testing
-
-`Collate::fake()` returns `CollateFake`. Assertions:
-
-- `assertSaved($path, $callback)`, `assertNothingSaved()`
-- `assertDownloaded($filename, $callback)`, `assertNothingDownloaded()`
-- `assertStreamed($filename, $callback)`, `assertNothingStreamed()`
-- `assertSplit()`
-
-`PendingCollateFake` introspection for callbacks: `sourcePath()`, `selectedPages()`, `additions()`, `isEncrypted()`, `hasPassword()`, `isLinearized()`, `isFlattened()`, `isOptimized()`, `hasStrippedMetadata()`, `rotations()`, `outputDisk()`, `pageCount()` (returns 3 per file), `pdfVersion()` (always `'1.7'`), `pageSize($page)` (always US Letter 612×792).
-
-### Usage Examples
-
-@verbatim
-<code-snippet name="Open and manipulate a PDF" lang="php">
-use Johind\Collate\Facades\Collate;
-
-Collate::open('report.pdf')
-    ->removePages('1')
-    ->overlay('watermark.pdf')
-    ->withMetadata(title: 'Q4 Report', author: 'Acme Corp')
-    ->linearize()
-    ->save('final-report.pdf');
-</code-snippet>
-@endverbatim
-
-@verbatim
-<code-snippet name="Merge multiple PDFs" lang="php">
-use Johind\Collate\Facades\Collate;
-use Johind\Collate\PendingCollate;
-
-Collate::merge(function (PendingCollate $pdf) {
-    $pdf->addPage('cover.pdf', 1);
-    $pdf->addPages('chapters/intro.pdf');
-    $pdf->addPages('chapters/main.pdf', range: '1-20');
-})->save('book.pdf');
-</code-snippet>
-@endverbatim
-
-@verbatim
-<code-snippet name="Encrypt and restrict permissions" lang="php">
-use Johind\Collate\Facades\Collate;
-
-Collate::open('sensitive.pdf')
-    ->encrypt(userPassword: 'user123', ownerPassword: 'owner456', bitLength: 256)
-    ->restrict('print', 'extract', 'modify')
-    ->save('protected.pdf');
-</code-snippet>
-@endverbatim
-
-@verbatim
-<code-snippet name="Testing with Collate::fake()" lang="php">
-use Johind\Collate\Facades\Collate;
-use Johind\Collate\PendingCollateFake;
-
-Collate::fake();
-
-// ... run your code ...
-
-Collate::assertSaved('output.pdf', function (PendingCollateFake $pdf) {
-    return $pdf->isEncrypted() && $pdf->isLinearized();
-});
-</code-snippet>
-@endverbatim
-
-### Configuration
-
-Published via `php artisan vendor:publish --tag="collate-config"`:
-
-- `binary_path` — path to qpdf binary (default: `'qpdf'`).
-- `default_disk` — storage disk for file resolution.
-- `temp_directory` — temp dir (default: `storage_path('app/collate')`).
+- Use `merge()` for simple document assembly; use `open()` when transforming an existing source.
+- `restrict()` must follow `encrypt()`. Use 256-bit encryption unless the user explicitly needs legacy compatibility.
+- Do not combine `onlyPages()` with `removePages()` on the same pending PDF.
+- Do not combine `withMetadata()` with `withoutMetadata()` on the same pending PDF.
+- Do not pass a page range when `addPages()` receives an array; chain separate `addPages($file, $range)` calls instead.
+- Page ranges follow qpdf syntax such as `1-5`, `1,3,5`, `z`, `1-z`, and `1-z:odd` / `1-z:even`.
+- `dump()` and `dd()` reveal the generated qpdf command and may expose file paths or passwords.
+- In tests, use `Collate::fake()` with `assertSaved()`, `assertDownloaded()`, `assertStreamed()`, or `assertSplit()` and callback assertions against `PendingCollateFake`.
