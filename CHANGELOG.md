@@ -2,6 +2,13 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.5.3
+
+### Documentation
+- Reworked Laravel Boost AI resources to reduce always-loaded token usage while preserving high-value agent guidance.
+- Condensed the core guideline into decision points, guardrails, and testing pointers.
+- Replaced the PDF pipeline skill with the broader `collate-pdf-workflows` skill, focused workflow examples, and clarified common pitfalls around `save()`, `split()`, page ranges, metadata, encryption, disks, and test fakes.
+
 ## 1.5.2 - 2026-05-08
 
 ### Added
