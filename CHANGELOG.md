@@ -2,7 +2,7 @@
 
 All notable changes to `Collate` will be documented in this file.
 
-## 1.5.3
+## 1.5.3 - 2026-05-22
 
 ### Documentation
 - Reworked Laravel Boost AI resources to reduce always-loaded token usage while preserving high-value agent guidance.
