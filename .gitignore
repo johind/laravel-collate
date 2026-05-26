@@ -31,5 +31,6 @@ testbench.yaml
 /docs
 /coverage
 /.ai/
+/playground/
 
 .DS_Store
