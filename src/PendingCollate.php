@@ -1889,16 +1889,14 @@ class PendingCollate implements Responsable
 
     /**
      * Write a secret to a temp file that only the current user can read.
+     *
+     * The ".json" extension is not about the contents: AppArmor's qpdf profile
+     * (enforced on Ubuntu 26.04) only lets qpdf open .pdf, .qdf and .json
+     * files, and qpdf silently treats an unreadable @file as a literal argument.
      */
     protected function writeSecretFile(string $contents): string
     {
-        $file = tempnam($this->ensureTempDirectory(), 'secret-');
-
-        if ($file === false) {
-            throw new CollateException('Collate: failed to create a temporary password file.');
-        }
-
-        @chmod($file, 0600);
+        $file = $this->tempFilePath('json', 'secret-');
 
         if (file_put_contents($file, $contents."\n") === false) {
             @unlink($file);
@@ -2138,10 +2136,13 @@ class PendingCollate implements Responsable
      * qpdf keeps the permissions of an existing output file, so creating the
      * file up front means documents are never written world-readable, even
      * when the temp directory already existed with broader permissions.
+     *
+     * Every file qpdf reads must end in .pdf, .qdf or .json, because
+     * AppArmor's qpdf profile (enforced on Ubuntu 26.04) denies anything else.
      */
-    protected function tempFilePath(string $extension = 'pdf'): string
+    protected function tempFilePath(string $extension = 'pdf', string $prefix = ''): string
     {
-        $path = $this->ensureTempDirectory().'/'.Str::uuid().'.'.$extension;
+        $path = $this->ensureTempDirectory().'/'.$prefix.Str::uuid().'.'.$extension;
 
         if (! @touch($path) || ! @chmod($path, 0600)) {
             @unlink($path);

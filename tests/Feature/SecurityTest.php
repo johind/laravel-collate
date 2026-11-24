@@ -124,7 +124,7 @@ describe('password exposure', function (): void {
 
         new Collate('qpdf', 'local', $tempDirectory)->open('multi.pdf')->encrypt('user')->content();
 
-        expect(glob($tempDirectory.'/secret-*'))->toBe([]);
+        expect(glob($tempDirectory.'/secret-*.json'))->toBe([]);
     });
 
     it('does not leak passwords when qpdf times out', function (): void {

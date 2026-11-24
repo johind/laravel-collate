@@ -17,6 +17,7 @@ All notable changes to `Collate` will be documented in this file.
 ### Added
 - `timeout` config option (`COLLATE_TIMEOUT`, default 60 seconds, `0` for no limit) for qpdf processes. A timeout throws a `ProcessFailedException`.
 - Page ranges accept qpdf's `rN` syntax for pages counted from the end (e.g. `r3-r1` for the last three pages).
+- README section on the AppArmor profile Ubuntu 26.04 applies to qpdf, which only allows `.pdf`, `.qdf` and `.json` files in a few locations. Collate's temporary files, including password files, use these extensions.
 - `SECURITY.md` with private vulnerability reporting instructions, a weekly `composer audit` workflow, and Dependabot for Composer and GitHub Actions.
 
 ### Changed

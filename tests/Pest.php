@@ -184,11 +184,9 @@ function qpdfJson(string $path): array
  */
 function storageQpdfJson(string $path, ?string $disk = null): array
 {
-    $tempFile = tempnam(sys_get_temp_dir(), 'collate-qpdf-json-');
-
-    if ($tempFile === false) {
-        throw new RuntimeException('Failed to create temp file for qpdf JSON.');
-    }
+    // qpdf may only open .pdf, .qdf and .json files under AppArmor's qpdf
+    // profile (enforced on Ubuntu 26.04), so the copy needs a .pdf extension.
+    $tempFile = sys_get_temp_dir().'/collate-qpdf-json-'.bin2hex(random_bytes(8)).'.pdf';
 
     file_put_contents($tempFile, storageContents($path, $disk));
 

@@ -36,6 +36,23 @@ You may also publish the config file manually:
 php artisan vendor:publish --tag="collate-config"
 ```
 
+### Ubuntu 26.04 and AppArmor
+
+Ubuntu 26.04 confines `/usr/bin/qpdf` with an AppArmor profile. It only lets qpdf open files ending in `.pdf`, `.qdf`
+or `.json`, and only in your home directory, `/tmp`, `/var/tmp`, `/mnt` and `/media` (plus read-only `/usr` and `/opt`).
+Collate names its own temporary files accordingly, but if your storage disk or `temp_directory` lives elsewhere, such
+as `/var/www`, qpdf fails with `Permission denied`. Allow those paths in `/etc/apparmor.d/local/qpdf`, for example:
+
+```text
+/var/www/your-app/storage/** rw,
+```
+
+Then reload the profile:
+
+```bash
+sudo apparmor_parser -r /etc/apparmor.d/qpdf
+```
+
 ## Configuration
 
 The published config file (`config/collate.php`) contains four options:
