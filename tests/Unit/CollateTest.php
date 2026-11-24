@@ -29,6 +29,32 @@ it('stores the temp directory', function (): void {
     expect($collate->tempDirectory())->toBe('/tmp/collate');
 });
 
+it('reads the process timeout from config', function (mixed $configured, int $expected): void {
+    config()->set('collate.timeout', $configured);
+    app()->forgetInstance(Collate::class);
+
+    expect(app(Collate::class)->timeout())->toBe($expected);
+})->with([
+    'integer' => [300, 300],
+    'numeric string from env' => ['120', 120],
+    'zero disables the limit' => ['0', 0],
+    'negative disables the limit' => [-5, 0],
+    'invalid falls back' => ['abc', 60],
+]);
+
+it('runs qpdf with the configured timeout', function (int $timeout, ?int $expected): void {
+    Illuminate\Support\Facades\Process::fake();
+
+    new Collate('qpdf', 'local', sys_get_temp_dir().'/collate-tests', timeout: $timeout)->inspect('doc.pdf')->isEncrypted();
+
+    Illuminate\Support\Facades\Process::assertRan(
+        fn (Illuminate\Process\PendingProcess $process): bool => $process->timeout === $expected
+    );
+})->with([
+    'limited' => [123, 123],
+    'unlimited' => [0, null],
+]);
+
 describe('fromDisk()', function (): void {
     it('returns a new instance', function (): void {
         $original = makeCollate();

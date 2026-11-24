@@ -149,6 +149,43 @@ describe('stream()', function (): void {
     });
 });
 
+describe('Content-Disposition encoding', function (): void {
+    it('escapes quotes so the filename cannot inject header parameters', function (): void {
+        $response = makeCollate()->open('input.pdf')->download('a"; filename="evil.html');
+
+        expect($response->headers->get('Content-Disposition'))
+            ->toBe('attachment; filename="a\"; filename=\"evil.html"');
+    });
+
+    it('strips control characters from the filename', function (): void {
+        $response = makeCollate()->open('input.pdf')->download("in\r\nvoice.pdf");
+
+        expect($response->headers->get('Content-Disposition'))->toBe('attachment; filename=invoice.pdf');
+    });
+
+    it('keeps filenames that are not valid UTF-8', function (): void {
+        $response = makeCollate()->open('input.pdf')->download("Bericht_\xFC.pdf");
+
+        expect($response->headers->get('Content-Disposition'))
+            ->toBe("attachment; filename=Bericht_.pdf; filename*=utf-8''Bericht_%FC.pdf");
+    });
+
+    it('rejects unknown dispositions', function (): void {
+        expect(fn (): StreamedResponse => makeCollate()->open('input.pdf')->toResponse(request(), 'a.pdf', 'evil'))
+            ->toThrow(InvalidArgumentException::class, "disposition must be 'inline' or 'attachment'");
+    });
+
+    it('streams the PDF contents', function (): void {
+        $response = makeCollate()->open('input.pdf')->download('a.pdf');
+
+        ob_start();
+        $response->sendContent();
+        $body = (string) ob_get_clean();
+
+        expect(mb_substr($body, 0, 4))->toBe('%PDF');
+    });
+});
+
 describe('split()', function (): void {
     it('replaces the {page} placeholder with the correct page number', function (): void {
         $paths = makeCollate()->open('multi.pdf')->split('pages/page-{page}.pdf');
@@ -162,12 +199,25 @@ describe('split()', function (): void {
         $paths->each(fn ($path) => expect(Storage::exists($path))->toBeTrue());
     });
 
-    it('without {page} in the path, all entries point to the same destination', function (): void {
+    it('without {page} in the path, appends the page number before the extension', function (): void {
         $paths = makeCollate()->open('multi.pdf')->split('pages/page.pdf');
 
-        expect($paths->unique())->toHaveCount(1)
-            ->and(Storage::exists('pages/page.pdf'))->toBeTrue()
-            ->and(mb_substr(storageContents('pages/page.pdf'), 0, 4))->toBe('%PDF');
+        expect($paths->all())->toBe([
+            'pages/page-1.pdf',
+            'pages/page-2.pdf',
+            'pages/page-3.pdf',
+            'pages/page-4.pdf',
+            'pages/page-5.pdf',
+        ])
+            ->and(Storage::exists('pages/page.pdf'))->toBeFalse();
+
+        $paths->each(fn (string $path) => expect(mb_substr(storageContents($path), 0, 4))->toBe('%PDF'));
+    });
+
+    it('without {page} or an extension, appends the page number to the path', function (): void {
+        $paths = makeCollate()->open('multi.pdf')->onlyPages('1-2')->split('pages/page');
+
+        expect($paths->all())->toBe(['pages/page-1', 'pages/page-2']);
     });
 
     it('respects page selection applied before splitting', function (): void {

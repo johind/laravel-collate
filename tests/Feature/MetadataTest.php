@@ -180,3 +180,51 @@ describe('metadata()', function (): void {
             ->and($meta->author)->toBe('Test');
     });
 });
+
+describe('metadata() string decoding', function (): void {
+    it('decodes binary-encoded (b:) info strings', function (string $encoded, string $expected): void {
+        $pending = pendingWithQpdfJson([
+            'qpdf' => [
+                ['jsonversion' => 2],
+                [
+                    'trailer' => ['value' => ['/Info' => '9 0 R']],
+                    'obj:9 0 R' => ['value' => ['/Title' => $encoded, '/Author' => 'u:Plain']],
+                ],
+            ],
+        ]);
+
+        $meta = $pending->metadata();
+
+        expect($meta->title)->toBe($expected)
+            ->and($meta->author)->toBe('Plain');
+    })->with([
+        'valid UTF-8 bytes' => ['b:c3a974c3a9', 'été'],
+        'UTF-8 with byte order mark' => ['b:efbbbfc3a974c3a9', 'été'],
+        'PDFDocEncoding, Latin-1 range' => ['b:e974e9', 'été'],
+        'PDFDocEncoding, bytes that differ from Latin-1' => ['b:8020a0', '• €'],
+        'odd-length hex is kept as-is' => ['b:abc', 'b:abc'],
+        'non-hex is kept as-is' => ['b:zz', 'b:zz'],
+    ]);
+
+    // qpdf decodes UTF-16 itself and reports it as "u:", so this uses
+    // single-byte text, which qpdf does report as "b:".
+    it('decodes binary strings written to a real PDF', function (): void {
+        $path = Storage::path('doc.pdf');
+        $json = qpdfJson($path);
+        $infoRef = qpdfValue(qpdfObjects($json), 'trailer', 'value', '/Info');
+        assert(is_string($infoRef));
+
+        file_put_contents($path.'.json', jsonString(['qpdf' => [
+            ['jsonversion' => 2, 'pushedinheritedpageresources' => false],
+            ['obj:'.$infoRef => ['value' => ['/Title' => 'b:e974e9']]],
+        ]]));
+        Illuminate\Support\Facades\Process::run(['qpdf', $path, '--update-from-json='.$path.'.json', '--replace-input'])->throw();
+
+        $objects = qpdfObjects(qpdfJson($path));
+        $infoRef = qpdfValue($objects, 'trailer', 'value', '/Info');
+        assert(is_string($infoRef));
+
+        expect(qpdfValue($objects, 'obj:'.$infoRef, 'value', '/Title'))->toBe('b:e974e9')
+            ->and(makeCollate()->inspect('doc.pdf')->metadata()->title)->toBe('été');
+    });
+});

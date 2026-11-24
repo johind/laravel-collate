@@ -58,15 +58,6 @@ describe('--pages block', function (): void {
         expect($command[$pagesIndex + 2])->toBe('2-5');
     });
 
-    it('the page override supersedes the stored page selection', function (): void {
-        $pending = makeCollate()->open('source.pdf')->onlyPages('2-5');
-        $command = buildCommand($pending, '/tmp/out.pdf', '1-3');
-
-        $pagesIndex = array_search('--pages', $command, true);
-
-        expect($command[$pagesIndex + 2])->toBe('1-3');
-    });
-
     it('appends addition files after the source in the --pages block', function (): void {
         $pending = makeCollate()->open('source.pdf')->addPages('addition.pdf');
         $command = buildCommand($pending);
@@ -116,15 +107,15 @@ describe('rotation', function (): void {
 });
 
 describe('encryption', function (): void {
-    it('appends --encrypt with passwords and bit length in the correct order', function (): void {
+    it('appends --encrypt with named password and bit length options', function (): void {
         $pending = makeCollate()->open('source.pdf')->encrypt('user', 'owner', 256);
         $command = buildCommand($pending);
 
         $encryptIndex = array_search('--encrypt', $command, true);
 
-        expect($command[$encryptIndex + 1])->toBe('user')
-            ->and($command[$encryptIndex + 2])->toBe('owner')
-            ->and($command[$encryptIndex + 3])->toBe('256');
+        expect($command[$encryptIndex + 1])->toBe('--user-password=user')
+            ->and($command[$encryptIndex + 2])->toBe('--owner-password=owner')
+            ->and($command[$encryptIndex + 3])->toBe('--bits=256');
     });
 
     it('appends the correct per-permission flags from the RESTRICTIONS map', function (): void {

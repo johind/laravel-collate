@@ -24,11 +24,13 @@ class CollateServiceProvider extends PackageServiceProvider
             $binaryPath = config('collate.binary_path', 'qpdf');
             $disk = config('collate.default_disk');
             $tempDirectory = config('collate.temp_directory', storage_path('app/collate'));
+            $timeout = config('collate.timeout', 60);
 
             return new Collate(
                 binaryPath: is_string($binaryPath) ? $binaryPath : 'qpdf',
                 disk: is_string($disk) ? $disk : null,
                 tempDirectory: is_string($tempDirectory) ? $tempDirectory : storage_path('app/collate'),
+                timeout: is_numeric($timeout) ? max(0, (int) $timeout) : 60,
             );
         });
     }

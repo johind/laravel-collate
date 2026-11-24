@@ -14,6 +14,23 @@ it('throws for invalid rotation degrees', function (): void {
         ->toThrow(InvalidArgumentException::class);
 });
 
+it('throws for an invalid page range', function (string $range): void {
+    expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->rotate(90, $range))
+        ->toThrow(InvalidArgumentException::class);
+})->with(['banana', '0', '1-', '1,,2', 'r0', '1-Z', '1-z:ODD', '1:odd,2']);
+
+it('accepts the page range syntax qpdf supports for rotation', function (string $range): void {
+    $pending = makeCollate()->open('doc.pdf')->rotate(90, $range);
+
+    expect(qpdfValue(getArrayProperty($pending, 'rotations'), 0, 'pages'))->toBe($range);
+})->with(['1-z,x2', 'r1', 'r3-r1', '1-z:even']);
+
+it('trims whitespace around the page range', function (): void {
+    $pending = makeCollate()->open('doc.pdf')->rotate(90, ' 1-z ');
+
+    expect(qpdfValue(getArrayProperty($pending, 'rotations'), 0, 'pages'))->toBe('1-z');
+});
+
 it('throws for negative degrees', function (): void {
     expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->rotate(-90))
         ->toThrow(InvalidArgumentException::class);

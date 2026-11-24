@@ -20,7 +20,7 @@ Use this skill when a task needs more than one PDF operation or needs tests arou
 - Apply incompatible choices once: either `onlyPages()` or `removePages()`, and either `withMetadata()` or `withoutMetadata()`.
 - Call `encrypt()` before `restrict()`. Prefer `bitLength: 256`.
 - Remember `save()` returns `bool`, not the saved path. Keep the destination path in a variable if later code must use it.
-- Use `split('dir/page-{page}.pdf')` unless overwriting every split page to the same destination is intentional.
+- Use `split('dir/page-{page}.pdf')`. Without `{page}`, Collate appends `-1`, `-2`, … before the extension.
 
 ## Transform One PDF
 

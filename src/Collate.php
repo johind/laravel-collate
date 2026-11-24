@@ -16,6 +16,7 @@ class Collate
         protected string $binaryPath,
         protected ?string $disk = null,
         protected string $tempDirectory = '',
+        protected int $timeout = 60,
     ) {}
 
     /**
@@ -93,5 +94,13 @@ class Collate
     public function tempDirectory(): string
     {
         return $this->tempDirectory;
+    }
+
+    /**
+     * Get the maximum number of seconds a qpdf process may run (0 for no limit).
+     */
+    public function timeout(): int
+    {
+        return $this->timeout;
     }
 }

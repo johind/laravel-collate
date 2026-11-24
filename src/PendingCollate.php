@@ -6,9 +6,11 @@ namespace Johind\Collate;
 
 use BadMethodCallException;
 use Illuminate\Contracts\Filesystem\FileNotFoundException;
+use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Process\Exceptions\ProcessTimedOutException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -16,9 +18,10 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
+use Johind\Collate\Exceptions\CollateException;
 use Johind\Collate\Exceptions\ProcessFailedException;
 use League\Flysystem\Local\LocalFilesystemAdapter;
-use RuntimeException;
+use League\Flysystem\WhitespacePathNormalizer;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -46,6 +49,11 @@ class PendingCollate implements Responsable
         'form' => '--form=n',
         'modify-other' => '--modify-other=n',
     ];
+
+    /**
+     * Placeholder shown instead of passwords in dump() and dd() output.
+     */
+    protected const string REDACTED = '********';
 
     /**
      * The source file being manipulated.
@@ -344,6 +352,9 @@ class PendingCollate implements Responsable
     /**
      * Encrypt the document and restrict permissions.
      *
+     * When no owner password is given, a random one is generated so that the
+     * user password cannot be used to lift restrictions set via restrict().
+     *
      * Note: 40-bit and 128-bit encryption are considered weak and are not
      * recommended for sensitive data. Modern versions of qpdf require an
      * internal flag to allow them, which Collate handles automatically.
@@ -359,11 +370,17 @@ class PendingCollate implements Responsable
             );
         }
 
+        $this->ensureValidPassword($userPassword);
+
+        if ($ownerPassword !== null) {
+            $this->ensureValidPassword($ownerPassword);
+        }
+
         $this->clearCache();
 
         $this->encryption = [
             'user_password' => $userPassword,
-            'owner_password' => $ownerPassword ?? $userPassword,
+            'owner_password' => $ownerPassword ?? bin2hex(random_bytes(16)),
             'bit_length' => $bitLength,
         ];
 
@@ -375,6 +392,7 @@ class PendingCollate implements Responsable
      */
     public function decrypt(string $password): static
     {
+        $this->ensureValidPassword($password);
         $this->clearCache();
         $this->decryptPassword = $password;
 
@@ -434,6 +452,9 @@ class PendingCollate implements Responsable
                 'Rotation degrees must be 0, 90, 180, or 270. Got: '.$degrees,
             );
         }
+
+        $range = mb_trim($range);
+        $this->validatePageRange($range, true);
 
         $this->clearCache();
 
@@ -508,11 +529,8 @@ class PendingCollate implements Responsable
                 // e.g. "/Title" → "Title" for PdfMetadata::fromArray.
                 $key = mb_ltrim((string) $field, '/');
 
-                // qpdf JSON v2 encodes strings with a "u:" prefix.
-                if (is_string($meta) && str_starts_with($meta, 'u:')) {
-                    $info[$key] = mb_substr($meta, 2);
-                } elseif (is_string($meta)) {
-                    $info[$key] = $meta;
+                if (is_string($meta)) {
+                    $info[$key] = $this->decodeJsonString($meta);
                 }
             }
         }
@@ -573,7 +591,7 @@ class PendingCollate implements Responsable
         $version = is_array($qpdf[0] ?? null) ? ($qpdf[0]['pdfversion'] ?? null) : null;
 
         if (! is_string($version)) {
-            throw new RuntimeException('Collate: failed to read PDF version from qpdf JSON output.');
+            throw new CollateException('Collate: failed to read PDF version from qpdf JSON output.');
         }
 
         return $version;
@@ -586,7 +604,7 @@ class PendingCollate implements Responsable
      * page-tree values and /UserUnit scaling. It is not adjusted for /Rotate.
      *
      * @throws InvalidArgumentException When the requested page does not exist.
-     * @throws RuntimeException When qpdf JSON does not contain a valid /MediaBox.
+     * @throws CollateException When qpdf JSON does not contain a valid /MediaBox.
      */
     public function pageSize(int $page = 1): PageSize
     {
@@ -623,7 +641,7 @@ class PendingCollate implements Responsable
         $mediaBox = $this->pageTreeValue($qpdfObjects, $pageValues, '/MediaBox');
 
         if (! is_array($mediaBox) || count($mediaBox) < 4) {
-            throw new RuntimeException(
+            throw new CollateException(
                 sprintf('Collate: page %d does not have a valid /MediaBox.', $page)
             );
         }
@@ -743,11 +761,11 @@ class PendingCollate implements Responsable
     /**
      * Dump the built qpdf command without executing it.
      *
-     * WARNING: The output may contain sensitive data such as file paths and passwords.
+     * Passwords are redacted. The output may still contain file paths.
      */
     public function dump(): static
     {
-        dump($this->buildCommand('{output}'));
+        dump($this->redactCommand($this->buildCommand('{output}')));
 
         return $this;
     }
@@ -755,11 +773,11 @@ class PendingCollate implements Responsable
     /**
      * Dump the built qpdf command and end the script.
      *
-     * WARNING: The output may contain sensitive data such as file paths and passwords.
+     * Passwords are redacted. The output may still contain file paths.
      */
     public function dd(): never
     {
-        dd($this->buildCommand('{output}'));
+        dd($this->redactCommand($this->buildCommand('{output}')));
     }
 
     /**
@@ -776,7 +794,7 @@ class PendingCollate implements Responsable
             $stream = fopen($tempOutput, 'r');
 
             if ($stream === false) {
-                throw new RuntimeException('Collate: failed to open temp file for reading: '.$tempOutput);
+                throw new CollateException('Collate: failed to open temp file for reading: '.$tempOutput);
             }
 
             return (bool) $disk->put($path, $stream);
@@ -814,7 +832,7 @@ class PendingCollate implements Responsable
         $content = file_get_contents($tempOutput);
 
         if ($content === false) {
-            throw new RuntimeException('Collate: failed to read temp file: '.$tempOutput);
+            throw new CollateException('Collate: failed to read temp file: '.$tempOutput);
         }
 
         return $content;
@@ -823,24 +841,23 @@ class PendingCollate implements Responsable
     /**
      * Split each page into a separate file, saved to the configured disk.
      *
-     * The path may contain a {page} placeholder for the page number.
+     * The path may contain a {page} placeholder for the page number. Without
+     * one, the page number is appended before the file extension
+     * (e.g. "pages/doc.pdf" becomes "pages/doc-1.pdf", "pages/doc-2.pdf", …).
      *
      * @return Collection<int, string>
      */
     public function split(string $path): Collection
     {
-        $dir = $this->collate->tempDirectory();
-
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-
         // Run the full pipeline first so that all operations (page selection,
         // rotations, encryption, overlays, etc.) are applied before splitting.
         // The processed file becomes the input to the split command.
         $processedFile = $this->process();
 
-        $prefix = $dir.'/'.Str::uuid();
+        // qpdf creates the page files itself with default permissions, so
+        // they are written into a directory only the current user can open.
+        $splitDirectory = $this->privateTempDirectory();
+        $prefix = $splitDirectory.'/page';
         $command = [$this->collate->binaryPath()];
 
         if ($this->encryption) {
@@ -849,12 +866,17 @@ class PendingCollate implements Responsable
 
         $command[] = $processedFile;
         $command[] = '--split-pages';
+
+        // qpdf does not carry the input's encryption over to split pages, so
+        // the encryption settings must be applied to each page explicitly.
+        array_push($command, ...$this->encryptionArguments());
+
         $command[] = $prefix.'-%d.pdf';
 
         $splitFiles = [];
 
         try {
-            $result = Process::run($command);
+            $result = $this->runQpdf($command);
 
             if (! $result->successful()) {
                 throw new ProcessFailedException(
@@ -875,8 +897,7 @@ class PendingCollate implements Responsable
             natsort($splitFiles);
 
             foreach ($splitFiles as $page => $tempFile) {
-                $pageNumber = $page + 1;
-                $destination = str_replace('{page}', (string) $pageNumber, $path);
+                $destination = $this->splitDestination($path, $page + 1);
 
                 // Stream each page file to disk rather than loading it into
                 // memory — individual pages of a large document can still be
@@ -884,10 +905,20 @@ class PendingCollate implements Responsable
                 $stream = fopen($tempFile, 'r');
 
                 if ($stream === false) {
-                    throw new RuntimeException('Collate: failed to open split file for reading: '.$tempFile);
+                    throw new CollateException('Collate: failed to open split file for reading: '.$tempFile);
                 }
 
-                $disk->put($destination, $stream);
+                try {
+                    $written = $disk->put($destination, $stream);
+                } finally {
+                    if (is_resource($stream)) {
+                        fclose($stream);
+                    }
+                }
+
+                if (! $written) {
+                    throw new CollateException(sprintf("Collate: failed to write split page to '%s'.", $destination));
+                }
 
                 $paths->push($destination);
             }
@@ -895,9 +926,11 @@ class PendingCollate implements Responsable
             return $paths;
         } finally {
             // Cleanup split files, but NOT the processed file if memoized
-            foreach ($splitFiles as $tempFile) {
+            foreach (glob($splitDirectory.'/*') ?: [] as $tempFile) {
                 @unlink($tempFile);
             }
+
+            @rmdir($splitDirectory);
         }
     }
 
@@ -909,17 +942,23 @@ class PendingCollate implements Responsable
         ?string $filename = null,
         string $disposition = 'inline',
     ): StreamedResponse {
-        $filename ??= 'document.pdf';
+        $filename = self::sanitizeFilename($filename ?? 'document.pdf');
+        self::ensureValidDisposition($disposition);
+
         $tempOutput = $this->process();
 
-        $response = response()->streamDownload(
+        // The closure intentionally binds $this: it keeps this instance (and
+        // therefore the memoized temp file) alive until the response is sent.
+        // Laravel encodes the Content-Disposition header, including an ASCII
+        // fallback and an RFC 6266 filename* parameter for non-ASCII names.
+        return response()->streamDownload(
             function () use ($tempOutput): void {
                 // Stream the file to the output buffer in chunks rather than
                 // reading the whole PDF into a PHP string first.
                 $stream = fopen($tempOutput, 'r');
 
                 if ($stream === false) {
-                    throw new RuntimeException('Collate: failed to open temp file for streaming: '.$tempOutput);
+                    throw new CollateException('Collate: failed to open temp file for streaming: '.$tempOutput);
                 }
 
                 fpassthru($stream);
@@ -927,16 +966,32 @@ class PendingCollate implements Responsable
             },
             $filename,
             ['Content-Type' => 'application/pdf'],
+            $disposition,
         );
+    }
 
-        // streamDownload() always sets Content-Disposition to 'attachment'.
-        // We override it here to support both inline and attachment dispositions.
-        $response->headers->set(
-            'Content-Disposition',
-            sprintf('%s; filename="%s"', $disposition, $filename)
-        );
+    /**
+     * Remove control characters that cannot appear in an HTTP header value.
+     */
+    protected static function sanitizeFilename(string $filename): string
+    {
+        // No /u modifier: the pattern is ASCII-only and must not reject
+        // filenames that are not valid UTF-8.
+        $sanitized = preg_replace('/[\x00-\x1F\x7F]/', '', $filename) ?? '';
 
-        return $response;
+        return $sanitized === '' ? 'document.pdf' : $sanitized;
+    }
+
+    /**
+     * Ensure the Content-Disposition type is one browsers understand.
+     */
+    protected static function ensureValidDisposition(string $disposition): void
+    {
+        if (! in_array($disposition, ['inline', 'attachment'], true)) {
+            throw new InvalidArgumentException(
+                sprintf("Collate: disposition must be 'inline' or 'attachment'. Got: '%s'.", $disposition)
+            );
+        }
     }
 
     /**
@@ -959,7 +1014,7 @@ class PendingCollate implements Responsable
 
         $command[] = $file;
 
-        $result = Process::run($command);
+        $result = $this->runQpdf($command);
 
         if (! $result->successful()) {
             throw new ProcessFailedException(
@@ -995,7 +1050,8 @@ class PendingCollate implements Responsable
      * Expand a qpdf page-range expression into an ordered list of page numbers.
      *
      * Supports ranges (`1-5`), reverse ranges (`5-1`), `z` (last page),
-     * exclusions (`x3`, `x5-8`), and positional `:odd`/`:even` modifiers.
+     * `rN` (Nth page from the end), exclusions (`x3`, `x5-8`), and a trailing positional `:odd`/`:even`
+     * modifier that applies to the whole expression, as in qpdf.
      *
      * @return list<int>
      */
@@ -1019,19 +1075,7 @@ class PendingCollate implements Responsable
                 $item = mb_substr($item, 1);
             }
 
-            // Extract per-item :odd/:even modifier
-            $itemModifier = null;
-            if (preg_match('/:(odd|even)$/i', $item, $modMatch)) {
-                $itemModifier = mb_strtolower($modMatch[1]);
-                $item = mb_substr($item, 0, -mb_strlen($modMatch[0]));
-            }
-
             $expanded = $this->expandRangeToken($item, $totalPages);
-
-            // Apply per-item positional modifier
-            if ($itemModifier !== null) {
-                $expanded = $this->applyPositionalModifier($expanded, $itemModifier);
-            }
 
             if ($isExclusion) {
                 $pages = array_values(array_diff($pages, $expanded));
@@ -1052,9 +1096,10 @@ class PendingCollate implements Responsable
      * Validate a page-range string for use in page selection.
      *
      * Ensures each comma-separated token matches qpdf page-range grammar:
-     * a page number or `z`, optionally followed by `-` and another page/`z`,
-     * optionally followed by `:odd` or `:even`. Exclusions (`x`) can be
-     * optionally allowed for internal selections.
+     * a page number, `z` or `rN`, optionally followed by `-` and another one.
+     * A single `:odd` or `:even` modifier may follow the whole expression;
+     * qpdf rejects modifiers on individual items. Exclusions (`x`) are only
+     * allowed where qpdf accepts them as part of a selection.
      *
      * @throws InvalidArgumentException
      */
@@ -1090,19 +1135,25 @@ class PendingCollate implements Responsable
                 }
             }
 
-            if (! preg_match('/^(\d+|z)(?:-(\d+|z))?(?::(odd|even))?$/i', $item, $matches)) {
+            if (preg_match('/^(\d+|z|r\d+)(?:-(\d+|z|r\d+))?:(odd|even)$/', $item)) {
+                throw new InvalidArgumentException(
+                    sprintf("Collate: '%s' is not a valid page range — an :odd or :even modifier may only appear once, at the end of the whole range.", $range)
+                );
+            }
+
+            // qpdf's range syntax is case-sensitive: "z", "r3", ":odd".
+            if (! preg_match('/^(\d+|z|r\d+)(?:-(\d+|z|r\d+))?$/', $item, $matches)) {
                 throw new InvalidArgumentException(
                     sprintf("Collate: '%s' is not a valid page number or range.", $item)
                 );
             }
 
-            $start = $matches[1] === 'z' ? null : (int) $matches[1];
-            $end = isset($matches[2]) && $matches[2] !== '' ? ($matches[2] === 'z' ? null : (int) $matches[2]) : null;
-
-            if (($start !== null && $start < 1) || ($end !== null && $end < 1)) {
-                throw new InvalidArgumentException(
-                    sprintf("Collate: page numbers must be at least 1. Got: '%s'.", $item)
-                );
+            foreach (array_slice($matches, 1) as $bound) {
+                if ($bound !== 'z' && (int) mb_ltrim($bound, 'r') < 1) {
+                    throw new InvalidArgumentException(
+                        sprintf("Collate: page numbers must be at least 1. Got: '%s'.", $item)
+                    );
+                }
             }
         }
     }
@@ -1114,12 +1165,12 @@ class PendingCollate implements Responsable
      */
     protected function extractGlobalModifier(string $range): array
     {
-        if (preg_match('/(\d|z):(odd|even)$/i', $range, $globalMatch)) {
+        if (preg_match('/(\d|z):(odd|even)$/', $range, $globalMatch)) {
             $lastComma = mb_strrpos($range, ',');
             $lastItem = $lastComma !== false ? mb_substr($range, $lastComma + 1) : $range;
 
             if (! str_starts_with(mb_trim($lastItem), 'x')) {
-                $modifier = mb_strtolower($globalMatch[2]);
+                $modifier = $globalMatch[2];
                 $normalized = mb_substr($range, 0, -mb_strlen(':'.$globalMatch[2]));
 
                 return [$normalized, $modifier];
@@ -1130,7 +1181,7 @@ class PendingCollate implements Responsable
     }
 
     /**
-     * Expand a single range token (e.g. "1", "3-8", "z", "z-1") into page numbers.
+     * Expand a single range token (e.g. "1", "3-8", "z", "z-1", "r2-r1") into page numbers.
      *
      * @return list<int>
      */
@@ -1138,23 +1189,38 @@ class PendingCollate implements Responsable
     {
         if (str_contains($token, '-')) {
             [$startStr, $endStr] = explode('-', $token, 2);
-            $start = ($startStr === 'z') ? $totalPages : (int) $startStr;
-            $end = ($endStr === 'z') ? $totalPages : (int) $endStr;
+            $start = $this->resolvePageNumber($startStr, $totalPages);
+            $end = $this->resolvePageNumber($endStr, $totalPages);
 
-            $pages = [];
-            $step = $start <= $end ? 1 : -1;
-            for ($p = $start; $step > 0 ? $p <= $end : $p >= $end; $p += $step) {
-                if ($p >= 1 && $p <= $totalPages) {
-                    $pages[] = $p;
-                }
+            // Clamp to the document before iterating so that huge page numbers
+            // (e.g. "1-99999999999") cannot turn into a long-running loop.
+            $low = max(1, min($start, $end));
+            $high = min($totalPages, max($start, $end));
+
+            if ($low > $high) {
+                return [];
             }
 
-            return $pages;
+            $pages = range($low, $high);
+
+            return $start <= $end ? $pages : array_reverse($pages);
         }
 
-        $page = ($token === 'z') ? $totalPages : (int) $token;
+        $page = $this->resolvePageNumber($token, $totalPages);
 
         return ($page >= 1 && $page <= $totalPages) ? [$page] : [];
+    }
+
+    /**
+     * Resolve a page reference: a number, "z" (last page) or "rN" (Nth page from the end).
+     */
+    protected function resolvePageNumber(string $reference, int $totalPages): int
+    {
+        return match (true) {
+            $reference === 'z' => $totalPages,
+            str_starts_with($reference, 'r') => $totalPages - (int) mb_substr($reference, 1) + 1,
+            default => (int) $reference,
+        };
     }
 
     /**
@@ -1175,21 +1241,21 @@ class PendingCollate implements Responsable
     /**
      * Run the qpdf process and return the path to the temporary output file.
      */
-    protected function process(?string $pageOverride = null): string
+    protected function process(): string
     {
-        if ($pageOverride === null && $this->processedPath !== null && file_exists($this->processedPath)) {
+        if ($this->processedPath !== null && file_exists($this->processedPath)) {
             return $this->processedPath;
         }
 
         $tempOutput = $this->tempFilePath();
         $this->selectDocumentDataPrimary();
-        $command = $this->buildCommand($tempOutput, $pageOverride);
+        $command = $this->buildCommand($tempOutput);
 
+        // Input files are cleaned up in __destruct.
         try {
-            $result = Process::run($command);
+            $result = $this->runQpdf($command);
 
             if (! $result->successful()) {
-                @unlink($tempOutput);
                 throw new ProcessFailedException(
                     'Collate: qpdf failed — '.$result->errorOutput(),
                     $result->exitCode() ?? 1,
@@ -1198,31 +1264,19 @@ class PendingCollate implements Responsable
             }
 
             if ($this->metadata !== []) {
-                try {
-                    $this->applyMetadata($tempOutput);
-                } catch (Throwable $e) {
-                    @unlink($tempOutput);
-                    throw $e;
-                }
+                $this->applyMetadata($tempOutput);
             }
 
             if ($this->stripMetadata) {
-                try {
-                    $this->removeMetadata($tempOutput);
-                } catch (Throwable $e) {
-                    @unlink($tempOutput);
-                    throw $e;
-                }
+                $this->removeMetadata($tempOutput);
             }
+        } catch (Throwable $throwable) {
+            @unlink($tempOutput);
 
-            if ($pageOverride === null) {
-                $this->processedPath = $tempOutput;
-            }
-
-            return $tempOutput;
-        } finally {
-            // Input files are cleaned up in __destruct
+            throw $throwable;
         }
+
+        return $this->processedPath = $tempOutput;
     }
 
     /**
@@ -1362,8 +1416,6 @@ class PendingCollate implements Responsable
      */
     protected function updatePdfFromJsonPatch(string $file, array $patch, string $action): void
     {
-        $jsonFile = $file.'.json';
-
         $json = json_encode([
             'qpdf' => [
                 ['jsonversion' => 2, 'pushedinheritedpageresources' => false],
@@ -1372,35 +1424,53 @@ class PendingCollate implements Responsable
         ]);
 
         if (! is_string($json)) {
-            throw new RuntimeException(sprintf('Collate: failed to encode qpdf JSON patch for %s.', $action));
+            throw new CollateException(sprintf('Collate: failed to encode qpdf JSON patch for %s.', $action));
         }
 
-        if (file_put_contents($jsonFile, $json) === false) {
-            throw new RuntimeException(sprintf('Collate: failed to write temporary JSON patch for %s.', $action));
-        }
+        $jsonFile = $this->tempFilePath('json');
 
-        $updateCommand = [
-            $this->collate->binaryPath(),
-        ];
+        // Write to a separate private file and move it into place instead of
+        // using --replace-input, which would recreate the file with default
+        // (world-readable) permissions.
+        $output = null;
 
-        if ($this->encryption) {
-            $updateCommand[] = '--password='.$this->encryption['owner_password'];
-        }
+        try {
+            if (file_put_contents($jsonFile, $json) === false) {
+                throw new CollateException(sprintf('Collate: failed to write temporary JSON patch for %s.', $action));
+            }
 
-        $updateCommand[] = $file;
-        $updateCommand[] = '--update-from-json='.$jsonFile;
-        $updateCommand[] = '--replace-input';
+            $output = $this->tempFilePath();
+            $updateCommand = [$this->collate->binaryPath()];
 
-        $result = Process::run($updateCommand);
+            if ($this->encryption) {
+                $updateCommand[] = '--password='.$this->encryption['owner_password'];
+            }
 
-        @unlink($jsonFile);
+            $updateCommand[] = $file;
+            $updateCommand[] = '--update-from-json='.$jsonFile;
+            $updateCommand[] = $output;
 
-        if (! $result->successful()) {
-            throw new ProcessFailedException(
-                sprintf('Collate: failed to %s — %s', $action, $result->errorOutput()),
-                $result->exitCode() ?? 1,
-                $result->errorOutput(),
-            );
+            $result = $this->runQpdf($updateCommand);
+
+            if (! $result->successful()) {
+                throw new ProcessFailedException(
+                    sprintf('Collate: failed to %s — %s', $action, $result->errorOutput()),
+                    $result->exitCode() ?? 1,
+                    $result->errorOutput(),
+                );
+            }
+
+            if (! @rename($output, $file)) {
+                throw new CollateException(sprintf('Collate: failed to replace the document after %s.', $action));
+            }
+
+            $output = null;
+        } finally {
+            @unlink($jsonFile);
+
+            if ($output !== null) {
+                @unlink($output);
+            }
         }
     }
 
@@ -1447,7 +1517,7 @@ class PendingCollate implements Responsable
     {
         $source = $this->requireSource($method);
 
-        $result = Process::run([
+        $result = $this->runQpdf([
             $this->collate->binaryPath(),
             $flag,
             $source,
@@ -1568,7 +1638,7 @@ class PendingCollate implements Responsable
 
         $command[] = $file;
 
-        $result = Process::run($command);
+        $result = $this->runQpdf($command);
 
         if (! $result->successful()) {
             throw new ProcessFailedException(
@@ -1581,7 +1651,7 @@ class PendingCollate implements Responsable
         $json = json_decode($result->output(), true);
 
         if (! is_array($json) || ! is_array($json['qpdf'] ?? null) || ! is_array($json['qpdf'][1] ?? null)) {
-            throw new RuntimeException(
+            throw new CollateException(
                 sprintf('Collate: failed to parse qpdf JSON output for %s — unexpected structure.', $action)
             );
         }
@@ -1628,10 +1698,8 @@ class PendingCollate implements Responsable
      *
      * @return list<string>
      */
-    protected function buildCommand(
-        string $outputPath,
-        ?string $pageOverride = null,
-    ): array {
+    protected function buildCommand(string $outputPath): array
+    {
         $command = [$this->collate->binaryPath()];
 
         if ($this->decryptPassword !== null) {
@@ -1652,12 +1720,9 @@ class PendingCollate implements Responsable
         // The --pages block controls which pages end up in the output.
         // "." refers to the primary input file specified above.
         if ($this->source !== null) {
-            $source = $this->source;
-            $pages = $pageOverride ?? $this->pageSelection;
-
             $command[] = '--pages';
-            $command[] = $this->documentDataPrimaryAddition === null ? '.' : $source;
-            $command[] = $pages ?? '1-z';
+            $command[] = $this->documentDataPrimaryAddition === null ? '.' : $this->source;
+            $command[] = $this->pageSelection ?? '1-z';
 
             foreach ($this->additions as $index => $addition) {
                 $command[] = $this->documentDataPrimaryAddition === $index ? '.' : $addition['file'];
@@ -1682,22 +1747,7 @@ class PendingCollate implements Responsable
         }
 
         // Encryption
-        if ($this->encryption) {
-            if ($this->encryption['bit_length'] < 256) {
-                $command[] = '--allow-weak-crypto';
-            }
-
-            $command[] = '--encrypt';
-            $command[] = $this->encryption['user_password'];
-            $command[] = $this->encryption['owner_password'];
-            $command[] = (string) $this->encryption['bit_length'];
-
-            foreach ($this->restrictions as $restriction) {
-                $command[] = self::RESTRICTIONS[$restriction];
-            }
-
-            $command[] = '--';
-        }
+        array_push($command, ...$this->encryptionArguments());
 
         // Overlay
         if ($this->overlayFile) {
@@ -1740,10 +1790,246 @@ class PendingCollate implements Responsable
     }
 
     /**
+     * Build the qpdf --encrypt arguments for the configured encryption.
+     *
+     * @return list<string>
+     */
+    protected function encryptionArguments(): array
+    {
+        if ($this->encryption === null) {
+            return [];
+        }
+
+        $arguments = [];
+
+        if ($this->encryption['bit_length'] < 256) {
+            $arguments[] = '--allow-weak-crypto';
+        }
+
+        // The named forms (qpdf 11+) accept any password, including ones that
+        // start with "--", which the positional form would parse as options.
+        $arguments[] = '--encrypt';
+        $arguments[] = '--user-password='.$this->encryption['user_password'];
+        $arguments[] = '--owner-password='.$this->encryption['owner_password'];
+        $arguments[] = '--bits='.$this->encryption['bit_length'];
+
+        foreach ($this->restrictions as $restriction) {
+            $arguments[] = self::RESTRICTIONS[$restriction];
+        }
+
+        $arguments[] = '--';
+
+        return $arguments;
+    }
+
+    /**
+     * Run a qpdf command with the configured timeout, keeping passwords out
+     * of the process arguments and out of timeout exception messages.
+     *
+     * Passwords would otherwise be visible to other users on the host (e.g.
+     * via `ps`) and end up in logs when Laravel reports a timed-out process
+     * with its full command line.
+     *
+     * @param  list<string>  $command
+     */
+    protected function runQpdf(array $command): ProcessResult
+    {
+        $secretFiles = [];
+
+        try {
+            $command = $this->moveSecretsToFiles($command, $secretFiles);
+
+            $timeout = $this->collate->timeout();
+            $process = $timeout > 0 ? Process::timeout($timeout) : Process::forever();
+
+            return $process->run($command);
+        } catch (ProcessTimedOutException $processTimedOutException) {
+            $errorOutput = $processTimedOutException->result->errorOutput();
+
+            throw new ProcessFailedException(
+                sprintf('Collate: qpdf timed out after %d seconds.', $this->collate->timeout()),
+                $processTimedOutException->result->exitCode() ?? 1,
+                $errorOutput,
+            );
+        } finally {
+            foreach ($secretFiles as $secretFile) {
+                @unlink($secretFile);
+            }
+        }
+    }
+
+    /**
+     * Replace passwords in a qpdf command with references to private temp files.
+     *
+     * `--password=…` becomes `--password-file=…`, and `--user-password=…` /
+     * `--owner-password=…` are read from qpdf argument files (`@file`).
+     *
+     * @param  list<string>  $command
+     * @param  list<string>  $secretFiles
+     * @return list<string>
+     */
+    protected function moveSecretsToFiles(array $command, array &$secretFiles): array
+    {
+        return array_map(function (string $argument) use (&$secretFiles): string {
+            if (str_starts_with($argument, '--password=')) {
+                $secretFiles[] = $file = $this->writeSecretFile(mb_substr($argument, mb_strlen('--password='), null, '8bit'));
+
+                return '--password-file='.$file;
+            }
+
+            if (str_starts_with($argument, '--user-password=') || str_starts_with($argument, '--owner-password=')) {
+                $secretFiles[] = $file = $this->writeSecretFile($argument);
+
+                return '@'.$file;
+            }
+
+            return $argument;
+        }, $command);
+    }
+
+    /**
+     * Write a secret to a temp file that only the current user can read.
+     */
+    protected function writeSecretFile(string $contents): string
+    {
+        $file = tempnam($this->ensureTempDirectory(), 'secret-');
+
+        if ($file === false) {
+            throw new CollateException('Collate: failed to create a temporary password file.');
+        }
+
+        @chmod($file, 0600);
+
+        if (file_put_contents($file, $contents."\n") === false) {
+            @unlink($file);
+
+            throw new CollateException('Collate: failed to write a temporary password file.');
+        }
+
+        return $file;
+    }
+
+    /**
+     * Replace passwords in a qpdf command with a placeholder for display.
+     *
+     * @param  list<string>  $command
+     * @return list<string>
+     */
+    protected function redactCommand(array $command): array
+    {
+        return array_map(static function (string $argument): string {
+            foreach (['--password=', '--user-password=', '--owner-password='] as $option) {
+                if (str_starts_with($argument, $option)) {
+                    return $option.self::REDACTED;
+                }
+            }
+
+            return $argument;
+        }, $command);
+    }
+
+    /**
+     * Ensure a password can be passed to qpdf safely.
+     *
+     * qpdf reads passwords from files line by line, so line breaks and NUL
+     * bytes cannot be represented.
+     */
+    protected function ensureValidPassword(string $password): void
+    {
+        if (preg_match('/[\r\n\x00]/', $password)) {
+            throw new InvalidArgumentException('Collate: passwords must not contain line breaks or NUL bytes.');
+        }
+    }
+
+    /**
+     * Decode a qpdf JSON v2 string value.
+     *
+     * qpdf prefixes Unicode strings with "u:" and binary strings with "b:"
+     * followed by hex. qpdf already decodes UTF-16 strings itself, so "b:"
+     * is used for 8-bit strings whose bytes qpdf would not round-trip. These
+     * are kept as-is when they are valid UTF-8 (which many PDF producers
+     * write), and otherwise decoded as PDFDocEncoding, as the PDF spec says.
+     */
+    protected function decodeJsonString(string $value): string
+    {
+        if (str_starts_with($value, 'u:')) {
+            return mb_substr($value, 2);
+        }
+
+        $hex = mb_substr($value, 2);
+
+        if (! str_starts_with($value, 'b:') || ! preg_match('/^(?:[0-9a-f]{2})*$/i', $hex)) {
+            return $value;
+        }
+
+        $bytes = (string) hex2bin($hex);
+
+        if (str_starts_with($bytes, "\xEF\xBB\xBF")) {
+            $bytes = mb_substr($bytes, 3, null, '8bit');
+        }
+
+        if (mb_check_encoding($bytes, 'UTF-8')) {
+            return $bytes;
+        }
+
+        return $this->decodePdfDocEncoding($bytes);
+    }
+
+    /**
+     * Decode a PDFDocEncoding string to UTF-8.
+     *
+     * PDFDocEncoding matches Latin-1 except for the bytes mapped below
+     * (PDF 2.0, Annex D). Undefined bytes become U+FFFD.
+     */
+    protected function decodePdfDocEncoding(string $bytes): string
+    {
+        $map = [
+            0x18 => 0x02D8, 0x19 => 0x02C7, 0x1A => 0x02C6, 0x1B => 0x02D9,
+            0x1C => 0x02DD, 0x1D => 0x02DB, 0x1E => 0x02DA, 0x1F => 0x02DC,
+            0x7F => 0xFFFD, 0x80 => 0x2022, 0x81 => 0x2020, 0x82 => 0x2021,
+            0x83 => 0x2026, 0x84 => 0x2014, 0x85 => 0x2013, 0x86 => 0x0192,
+            0x87 => 0x2044, 0x88 => 0x2039, 0x89 => 0x203A, 0x8A => 0x2212,
+            0x8B => 0x2030, 0x8C => 0x201E, 0x8D => 0x201C, 0x8E => 0x201D,
+            0x8F => 0x2018, 0x90 => 0x2019, 0x91 => 0x201A, 0x92 => 0x2122,
+            0x93 => 0xFB01, 0x94 => 0xFB02, 0x95 => 0x0141, 0x96 => 0x0152,
+            0x97 => 0x0160, 0x98 => 0x0178, 0x99 => 0x017D, 0x9A => 0x0131,
+            0x9B => 0x0142, 0x9C => 0x0153, 0x9D => 0x0161, 0x9E => 0x017E,
+            0x9F => 0xFFFD, 0xA0 => 0x20AC, 0xAD => 0xFFFD,
+        ];
+
+        $decoded = '';
+
+        foreach (mb_str_split($bytes, 1, '8bit') as $byte) {
+            $decoded .= mb_chr($map[ord($byte)] ?? ord($byte), 'UTF-8');
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Resolve the destination path for a single split page.
+     */
+    protected function splitDestination(string $path, int $page): string
+    {
+        if (str_contains($path, '{page}')) {
+            return str_replace('{page}', (string) $page, $path);
+        }
+
+        $extension = pathinfo($path, PATHINFO_EXTENSION);
+        $suffix = $extension === '' ? '' : '.'.$extension;
+        $base = $suffix === '' ? $path : mb_substr($path, 0, -mb_strlen($suffix));
+
+        return $base.'-'.$page.$suffix;
+    }
+
+    /**
      * Resolve a file input to a local absolute path.
      *
      * For local disks, this returns the path directly. For remote disks (S3, etc.),
      * the file is downloaded to the temp directory so qpdf can access it.
+     *
+     * Paths are normalized the same way Laravel's Storage facade does, so
+     * paths that escape the disk root (e.g. "../.env") are rejected.
      */
     protected function resolveFilePath(string|UploadedFile $file): string
     {
@@ -1757,6 +2043,7 @@ class PendingCollate implements Responsable
             return $path;
         }
 
+        $file = new WhitespacePathNormalizer()->normalizePath($file);
         $disk = Storage::disk($this->collate->diskName());
 
         if ($disk->getAdapter() instanceof LocalFilesystemAdapter) {
@@ -1771,8 +2058,6 @@ class PendingCollate implements Responsable
      */
     protected function downloadToTemp(FilesystemAdapter $disk, string $file): string
     {
-        $tempPath = $this->tempFilePath();
-
         // Use a stream rather than file_get_contents to avoid loading the
         // entire remote file into PHP memory before writing it to disk.
         $stream = $disk->readStream($file);
@@ -1783,7 +2068,22 @@ class PendingCollate implements Responsable
             );
         }
 
-        file_put_contents($tempPath, $stream);
+        try {
+            $tempPath = $this->tempFilePath();
+            $written = file_put_contents($tempPath, $stream);
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+
+        if ($written === false) {
+            @unlink($tempPath);
+
+            throw new CollateException(
+                sprintf("Collate: failed to copy file '%s' from disk to a temporary file.", $file)
+            );
+        }
 
         $this->tempInputFiles[] = $tempPath;
 
@@ -1833,16 +2133,53 @@ class PendingCollate implements Responsable
     }
 
     /**
-     * Generate a temporary file path.
+     * Create an empty temporary file that only the current user can read.
+     *
+     * qpdf keeps the permissions of an existing output file, so creating the
+     * file up front means documents are never written world-readable, even
+     * when the temp directory already existed with broader permissions.
      */
-    protected function tempFilePath(): string
+    protected function tempFilePath(string $extension = 'pdf'): string
+    {
+        $path = $this->ensureTempDirectory().'/'.Str::uuid().'.'.$extension;
+
+        if (! @touch($path) || ! @chmod($path, 0600)) {
+            @unlink($path);
+
+            throw new CollateException(sprintf("Collate: failed to create temporary file '%s'.", $path));
+        }
+
+        return $path;
+    }
+
+    /**
+     * Create a temporary directory that only the current user can access.
+     */
+    protected function privateTempDirectory(): string
+    {
+        $dir = $this->ensureTempDirectory().'/'.Str::uuid();
+
+        if (! @mkdir($dir, 0700)) {
+            throw new CollateException(sprintf("Collate: failed to create temporary directory '%s'.", $dir));
+        }
+
+        return $dir;
+    }
+
+    /**
+     * Create the temp directory if needed, readable only by the current user,
+     * since it may hold decrypted documents. Collate does not change the
+     * permissions of an existing directory; the files it writes there are
+     * private either way.
+     */
+    protected function ensureTempDirectory(): string
     {
         $dir = $this->collate->tempDirectory();
 
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        if (! is_dir($dir) && ! @mkdir($dir, 0700, true) && ! is_dir($dir)) {
+            throw new CollateException(sprintf("Collate: failed to create temp directory '%s'.", $dir));
         }
 
-        return $dir.'/'.Str::uuid().'.pdf';
+        return $dir;
     }
 }

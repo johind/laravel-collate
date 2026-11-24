@@ -17,6 +17,20 @@ beforeEach(function (): void {
     Storage::put('annotated.pdf', fixtureContents('annotated.pdf'));
 });
 
+describe('pageCount() with relative page numbers', function (): void {
+    it('matches the number of pages qpdf writes', function (string $selection, int $expected): void {
+        $pending = makeCollate()->open('multi.pdf')->onlyPages($selection);
+        $pending->save('selected.pdf');
+
+        expect($pending->pageCount())->toBe($expected)
+            ->and(makeCollate()->open('selected.pdf')->pageCount())->toBe($expected);
+    })->with([
+        'last page' => ['r1', 1],
+        'relative range' => ['r3-r1', 3],
+        'mixed with absolute pages' => ['1,r2-z:odd', 2],
+    ]);
+});
+
 describe('isEncrypted()', function (): void {
     it('returns false for an unencrypted document', function (): void {
         expect(makeCollate()->inspect('doc.pdf')->isEncrypted())->toBeFalse();

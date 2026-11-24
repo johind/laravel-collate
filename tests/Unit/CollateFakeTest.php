@@ -229,3 +229,42 @@ describe('assertions', function (): void {
             ->toThrow(ExpectationFailedException::class, 'Expected a PDF to be split, but none was.');
     });
 });
+
+describe('fake isolation from qpdf', function (): void {
+    beforeEach(function (): void {
+        Illuminate\Support\Facades\Process::preventStrayProcesses();
+        Illuminate\Support\Facades\Process::fake();
+    });
+
+    it('metadata() returns configured metadata without running qpdf', function (): void {
+        $fake = new CollateFake;
+
+        $meta = $fake->inspect('missing.pdf')->metadata();
+        $configured = $fake->open('missing.pdf')->withMetadata(title: 'Report', author: 'Jane')->metadata();
+
+        expect($meta->title)->toBeNull()
+            ->and($configured->title)->toBe('Report')
+            ->and($configured->author)->toBe('Jane');
+
+        Illuminate\Support\Facades\Process::assertNothingRan();
+    });
+
+    it('removePages() with :odd/:even does not run qpdf', function (): void {
+        $pending = new CollateFake()->open('missing.pdf')->removePages('1-z:odd');
+
+        expect($pending->selectedPages())->toBe('1-z,x1,x3');
+
+        Illuminate\Support\Facades\Process::assertNothingRan();
+    });
+
+    it('split() numbers pages the same way as the real implementation', function (): void {
+        $paths = new CollateFake()->open('doc.pdf')->split('pages/doc.pdf');
+
+        expect($paths->all())->toBe(['pages/doc-1.pdf', 'pages/doc-2.pdf', 'pages/doc-3.pdf']);
+    });
+
+    it('encodes Content-Disposition like the real implementation', function (): void {
+        expect(new CollateFake()->open('doc.pdf')->download('résumé.pdf')->headers->get('Content-Disposition'))
+            ->toBe("attachment; filename=resume.pdf; filename*=utf-8''r%C3%A9sum%C3%A9.pdf");
+    });
+});

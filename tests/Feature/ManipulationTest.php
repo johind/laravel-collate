@@ -25,6 +25,23 @@ it('rotates pages correctly', function (): void {
     expect($pageValues['/Rotate'] ?? null)->toBe(90);
 });
 
+it('rotates the pages selected with exclusions and relative page numbers', function (string $range, array $rotated): void {
+    Storage::put('multi.pdf', fixtureContents('multi-page.pdf'));
+
+    makeCollate()->open('multi.pdf')->rotate(90, $range)->save('rotated.pdf');
+
+    $json = storageQpdfJson('rotated.pdf');
+    $actual = array_values(array_filter(
+        range(1, 5),
+        fn (int $page): bool => (qpdfPageValues($json, $page)['/Rotate'] ?? 0) === 90,
+    ));
+
+    expect($actual)->toBe($rotated);
+})->with([
+    'exclusion' => ['1-z,x2', [1, 3, 4, 5]],
+    'relative range' => ['r2-r1', [4, 5]],
+]);
+
 it('overlays a PDF correctly', function (): void {
     makeCollate()->open('input.pdf')
         ->overlay('other.pdf')

@@ -6,6 +6,8 @@ namespace Johind\Collate;
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PendingCollateFake extends PendingCollate
@@ -90,6 +92,14 @@ class PendingCollateFake extends PendingCollate
     public function hasStrippedMetadata(): bool
     {
         return $this->stripMetadata;
+    }
+
+    /**
+     * Return the metadata configured via withMetadata(), without reading a file.
+     */
+    public function metadata(): PdfMetadata
+    {
+        return PdfMetadata::fromArray($this->metadata);
     }
 
     /**
@@ -193,20 +203,14 @@ class PendingCollateFake extends PendingCollate
     {
         $this->downloadedAs = $filename;
 
-        return new StreamedResponse(fn (): null => null, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => sprintf('attachment; filename="%s"', $filename),
-        ]);
+        return $this->fakeResponse($filename, 'attachment');
     }
 
     public function stream(string $filename = 'document.pdf'): StreamedResponse
     {
         $this->streamedAs = $filename;
 
-        return new StreamedResponse(fn (): null => null, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => sprintf('inline; filename="%s"', $filename),
-        ]);
+        return $this->fakeResponse($filename, 'inline');
     }
 
     public function content(): string
@@ -219,8 +223,7 @@ class PendingCollateFake extends PendingCollate
         $this->wasSplit = true;
         $count = $this->pageCount();
 
-        return collect(range(1, $count))->map(fn ($page): string => str_replace('{page}', (string) $page, $path)
-        );
+        return collect(range(1, $count))->map(fn (int $page): string => $this->splitDestination($path, $page));
     }
 
     public function pageCount(): int
@@ -235,9 +238,37 @@ class PendingCollateFake extends PendingCollate
 
     public function toResponse($request, ?string $filename = null, string $disposition = 'inline'): StreamedResponse
     {
+        self::ensureValidDisposition($disposition);
+
         return $disposition === 'attachment'
             ? $this->download($filename ?? 'document.pdf')
             : $this->stream($filename ?? 'document.pdf');
+    }
+
+    /**
+     * Assume every file has 3 pages, matching pageCount(), so that
+     * removePages() with :odd/:even never runs qpdf against fake paths.
+     */
+    protected function getFilePageCount(string $file): int
+    {
+        return 3;
+    }
+
+    /**
+     * Build a response with the same Content-Disposition encoding as Laravel.
+     */
+    protected function fakeResponse(string $filename, string $disposition): StreamedResponse
+    {
+        $filename = self::sanitizeFilename($filename);
+
+        return new StreamedResponse(fn (): null => null, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => HeaderUtils::makeDisposition(
+                $disposition,
+                $filename,
+                str_replace('%', '', Str::ascii($filename)),
+            ),
+        ]);
     }
 
     /**

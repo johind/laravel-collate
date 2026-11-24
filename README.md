@@ -38,7 +38,7 @@ php artisan vendor:publish --tag="collate-config"
 
 ## Configuration
 
-The published config file (`config/collate.php`) contains three options:
+The published config file (`config/collate.php`) contains four options:
 
 ```php
 return [
@@ -50,8 +50,15 @@ return [
 
     // Directory for temporary files during processing (automatically cleaned up)
     'temp_directory' => env('COLLATE_TEMP_DIR', storage_path('app/collate')),
+
+    // Maximum number of seconds a single qpdf process may run (default: 60, 0 for no limit)
+    'timeout' => env('COLLATE_TIMEOUT', 60),
 ];
 ```
+
+The temp directory may briefly hold decrypted documents. Collate writes its temp files so that only the user running PHP
+can read them, and creates the directory itself with the same restriction. Collate does not change the permissions of a
+directory that already exists.
 
 ## Quick Examples
 
@@ -245,15 +252,20 @@ Collate::open('document.pdf')
 Anywhere a page range string is accepted (`onlyPages()`, `addPages()`, `removePages()`, `rotate()`), you can
 use [qpdf range syntax](https://qpdf.readthedocs.io/en/stable/cli.html#page-ranges):
 
-| Expression | Meaning           |
-|------------|-------------------|
-| `1-5`      | Pages 1 through 5 |
-| `1,3,5`    | Pages 1, 3, and 5 |
-| `1-3,7-9`  | Pages 1–3 and 7–9 |
-| `z`        | Last page         |
-| `1-z`      | All pages         |
-| `1-z:odd`  | Odd pages only    |
-| `1-z:even` | Even pages only   |
+| Expression | Meaning                         |
+|------------|---------------------------------|
+| `1-5`      | Pages 1 through 5               |
+| `1,3,5`    | Pages 1, 3, and 5               |
+| `1-3,7-9`  | Pages 1–3 and 7–9               |
+| `z`        | Last page                       |
+| `r1`       | Last page, counted from the end |
+| `r3-r1`    | Last three pages                |
+| `1-z`      | All pages                       |
+| `1-z:odd`  | Odd pages only                  |
+| `1-z:even` | Even pages only                 |
+
+`:odd` and `:even` may only appear once, at the end of the whole range. `rotate()` also accepts exclusions such as
+`1-z,x2` (every page except page 2).
 
 ### Splitting a PDF
 
@@ -266,9 +278,10 @@ $paths = Collate::open('multi-page.pdf')
 // $paths → Collection ['pages/page-1.pdf', 'pages/page-2.pdf', ...]
 ```
 
-> [!IMPORTANT]
-> Always include `{page}` in your path. Without it, every page will be written
-> to the same destination, with each one overwriting the last.
+Without a `{page}` placeholder, the page number is appended before the file extension, so `split('pages/report.pdf')`
+writes `pages/report-1.pdf`, `pages/report-2.pdf`, and so on.
+
+If the document is encrypted with `encrypt()`, every split page is encrypted with the same passwords and restrictions.
 
 All operations (page selection, rotation, overlays, etc.) are applied before splitting, so you can chain them freely:
 
@@ -321,6 +334,10 @@ Collate::open('confidential.pdf')
     ->save('protected.pdf');
 ```
 
+The user password is needed to open the document. When you don't pass an owner password, Collate generates a random
+one. The owner password lifts any restrictions, so a random one means nobody can remove them. Pass your own owner
+password if you need to change the document's permissions later.
+
 For more control, use separate user and owner passwords and restrict specific permissions. Note that `restrict()` must
 be called after `encrypt()`:
 
@@ -347,6 +364,13 @@ The following permissions can be passed to `restrict()`:
 | `print-highres` | Disallow high-resolution printing                  |
 | `form`          | Disallow filling in form fields                    |
 | `modify-other`  | Disallow all other modifications                   |
+
+PDF viewers enforce these restrictions themselves, so treat them as a deterrent rather than access control. Use a user
+password when the content itself must stay confidential.
+
+Collate passes passwords to qpdf through temporary files that only the user running PHP can read, never as
+command-line arguments, so other users on the server can't see them in the process list. Passwords can't contain line
+breaks or NUL bytes.
 
 Decrypt a password-protected document:
 
@@ -553,17 +577,21 @@ Collate::open('document.pdf')
     ->dd();    // dumps the command and stops execution
 ```
 
-> [!WARNING]
-> The output may contain sensitive data such as file paths and passwords.
+Passwords are shown as `********`. The output may still contain file paths.
 
 ### Error Handling
 
-All exceptions thrown by Collate extend `Johind\Collate\Exceptions\CollateException`, which itself extends PHP's
+Processing and file-handling errors throw `Johind\Collate\Exceptions\CollateException`, which extends PHP's
 `RuntimeException`.
 
-When a `qpdf` command fails, a `Johind\Collate\Exceptions\ProcessFailedException` is thrown, exposing the `exitCode`
-and `errorOutput` from the underlying process. Invalid arguments (bad page ranges, unsupported rotation degrees, etc.)
-throw standard `InvalidArgumentException` or `BadMethodCallException` instances.
+When a `qpdf` command fails or exceeds the configured `timeout`, a `Johind\Collate\Exceptions\ProcessFailedException`
+(a `CollateException`) is thrown, exposing the `exitCode` and `errorOutput` from the underlying process. Invalid
+arguments (bad page ranges, unsupported rotation degrees, etc.) throw standard `InvalidArgumentException` or
+`BadMethodCallException` instances.
+
+Paths are resolved the same way as Laravel's `Storage` facade. A path that escapes the disk root (such as `../.env`)
+throws `League\Flysystem\PathTraversalDetected`, and a missing remote file throws
+`Illuminate\Contracts\Filesystem\FileNotFoundException`.
 
 ```php
 use Johind\Collate\Exceptions\ProcessFailedException;
@@ -592,7 +620,8 @@ classes or run the suite through `vendor/bin/phpunit`.
 
 ## Security
 
-If you discover a security vulnerability, please send an email rather than opening a GitHub issue.
+If you discover a security vulnerability, please report it privately as described in the [security policy](SECURITY.md)
+rather than opening a public GitHub issue.
 
 ## License
 

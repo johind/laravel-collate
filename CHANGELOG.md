@@ -2,6 +2,43 @@
 
 All notable changes to `Collate` will be documented in this file.
 
+## 1.5.4 - Unreleased
+
+### Security
+- `split()` now encrypts every page of an encrypted document. Previously, `->encrypt(...)->split(...)` wrote unencrypted pages.
+- `encrypt()` without an owner password now generates a random owner password instead of reusing the user password. Previously, anyone with the user password, or anyone at all with `encrypt('')`, had owner rights and could ignore `restrict()`.
+- Passwords are passed to qpdf through temporary files readable only by the current user, instead of as command-line arguments. They no longer show up in the process list or in Laravel's timeout exception messages.
+- `dump()` and `dd()` redact passwords.
+- File paths are normalized like Laravel's `Storage` facade. On Laravel 11 and 12, `open()`, `inspect()`, `merge()`, `addPages()`, `overlay()` and `underlay()` could read files outside the disk root, e.g. `open('../.env')`. These now throw `League\Flysystem\PathTraversalDetected`.
+- `Content-Disposition` headers are now encoded by Laravel. Filenames can no longer inject header parameters, non-ASCII names get an RFC 6266 `filename*`, control characters are stripped, and only `inline` or `attachment` dispositions are accepted.
+- Page-range counting is now bounded by the document's page count, so ranges like `1-99999999999` no longer tie up PHP in a long loop.
+- Temp files are now readable only by the current user (`0600`), including after metadata changes, and pages from `split()` are written to a private subdirectory. A new temp directory is created with mode `0700`. Previously, decrypted documents in the temp directory could be read by other local users.
+
+### Added
+- `timeout` config option (`COLLATE_TIMEOUT`, default 60 seconds, `0` for no limit) for qpdf processes. A timeout throws a `ProcessFailedException`.
+- Page ranges accept qpdf's `rN` syntax for pages counted from the end (e.g. `r3-r1` for the last three pages).
+- `SECURITY.md` with private vulnerability reporting instructions, a weekly `composer audit` workflow, and Dependabot for Composer and GitHub Actions.
+
+### Changed
+- `split()` without a `{page}` placeholder appends the page number before the extension (`report.pdf` → `report-1.pdf`, `report-2.pdf`, …). Previously, every page overwrote the same file.
+- Encryption uses qpdf's named `--user-password`, `--owner-password` and `--bits` options, so passwords starting with `--` work. Passwords containing line breaks or NUL bytes are rejected.
+- `:odd` / `:even` modifiers are only accepted once, at the end of a whole page range (e.g. `1,3-5:even`). qpdf rejects them on individual items such as `1-3:odd,4`, which previously passed validation and failed later.
+- `rotate()` validates its page range immediately. Exclusions such as `1-z,x2` remain supported.
+- Page ranges are case-sensitive, as in qpdf: `Z` or `:ODD` are rejected up front instead of failing in qpdf.
+- Errors from file handling and qpdf output parsing now throw `CollateException` (still a `RuntimeException`), as the README documents.
+- Runtime dependencies (`illuminate/*`, `league/flysystem`, `symfony/http-foundation`) are now declared explicitly.
+
+### Fixed
+- `metadata()` decodes binary (`b:`) strings from qpdf (UTF-8 or PDFDocEncoding text) instead of returning the raw hex.
+- `Collate::fake()`: `metadata()` and `removePages()` with `:odd` / `:even` no longer run qpdf against fake paths. Fake `split()` paths and response headers now match the real implementation.
+- `split()` throws when a page cannot be written to the disk, and remote downloads throw when the temp copy cannot be written.
+- `composer check` passes again with current PHPStan and Rector releases.
+
+### Internal
+- Removed the unused page-override parameter from `process()` / `buildCommand()`.
+- CI keeps testing Laravel 11, which Composer now refuses to install by default because it no longer receives security fixes. A failing matrix job no longer cancels the others.
+- CI workflows run with read-only `contents` permissions and don't persist checkout credentials. `rector.php`, `pint.json` and `SECURITY.md` are excluded from dist archives.
+
 ## 1.5.3 - 2026-05-22
 
 ### Documentation

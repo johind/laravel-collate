@@ -22,7 +22,6 @@ class CollateFake extends Collate
     {
         parent::__construct(
             binaryPath: 'qpdf',
-            disk: null,
             tempDirectory: '',
         );
 

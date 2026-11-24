@@ -129,10 +129,10 @@ function getArrayProperty(object $obj, string $property): array
  *
  * @return list<string>
  */
-function buildCommand(PendingCollate $pending, string $output = '/tmp/test-output.pdf', ?string $pageOverride = null): array
+function buildCommand(PendingCollate $pending, string $output = '/tmp/test-output.pdf'): array
 {
     $method = new ReflectionMethod(PendingCollate::class, 'buildCommand');
-    $command = $method->invoke($pending, $output, $pageOverride);
+    $command = $method->invoke($pending, $output);
 
     if (! is_array($command) || array_any($command, fn (mixed $part): bool => ! is_string($part))) {
         throw new RuntimeException('Expected buildCommand() to return a list of strings.');

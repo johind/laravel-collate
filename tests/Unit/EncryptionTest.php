@@ -33,12 +33,28 @@ describe('encrypt()', function (): void {
         expect(qpdfValue(getArrayProperty($pending, 'encryption'), 'bit_length'))->toBe(256);
     });
 
-    it('defaults the owner password to the user password', function (): void {
-        $pending = makeCollate()->open('doc.pdf')->encrypt('secret');
-        $encryption = getArrayProperty($pending, 'encryption');
+    it('generates a random owner password distinct from the user password', function (): void {
+        $first = getArrayProperty(makeCollate()->open('doc.pdf')->encrypt('secret'), 'encryption');
+        $second = getArrayProperty(makeCollate()->open('doc.pdf')->encrypt('secret'), 'encryption');
 
-        expect($encryption['user_password'])->toBe('secret')
-            ->and($encryption['owner_password'])->toBe('secret');
+        expect($first['user_password'])->toBe('secret')
+            ->and($first['owner_password'])->not->toBeEmpty()
+            ->and($first['owner_password'])->not->toBe('secret')
+            ->and($first['owner_password'])->not->toBe($second['owner_password']);
+    });
+
+    it('rejects passwords containing line breaks or NUL bytes', function (string $user, ?string $owner): void {
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->encrypt($user, $owner))
+            ->toThrow(InvalidArgumentException::class, 'line breaks');
+    })->with([
+        'newline in user password' => ["a\nb", null],
+        'carriage return in owner password' => ['a', "b\rc"],
+        'NUL in owner password' => ['a', "b\0c"],
+    ]);
+
+    it('rejects decrypt passwords containing line breaks', function (): void {
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->decrypt("a\nb"))
+            ->toThrow(InvalidArgumentException::class, 'line breaks');
     });
 
     it('accepts separate user and owner passwords', function (): void {

@@ -33,7 +33,6 @@ it('resolves an UploadedFile to its real path', function (): void {
 
 it('throws FileNotFoundException for an UploadedFile that is no longer on disk', function (): void {
     $mockFile = Mockery::mock(UploadedFile::class);
-    /** @phpstan-ignore method.notFound */
     $mockFile->shouldReceive('getRealPath')->andReturn(false);
 
     /** @var UploadedFile $mockFile */

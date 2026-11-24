@@ -66,6 +66,17 @@ describe('onlyPages()', function (): void {
             ->toThrow(InvalidArgumentException::class);
     });
 
+    it('throws for a modifier on an individual item, which qpdf rejects', function (string $range): void {
+        expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->onlyPages($range))
+            ->toThrow(InvalidArgumentException::class, 'may only appear once, at the end of the whole range');
+    })->with(['1-3:odd,4', '1:even,2-3', '1-2:odd,3-4:even']);
+
+    it('accepts a single trailing modifier that applies to the whole range', function (): void {
+        $pending = makeCollate()->open('doc.pdf')->onlyPages('1,3-5:even');
+
+        expect(getProperty($pending, 'pageSelection'))->toBe('1,3-5:even');
+    });
+
     it('throws for page zero in range "z-0"', function (): void {
         expect(fn (): Johind\Collate\PendingCollate => makeCollate()->open('doc.pdf')->onlyPages('z-0'))
             ->toThrow(InvalidArgumentException::class);
